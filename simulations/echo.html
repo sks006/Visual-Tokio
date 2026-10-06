@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tokio TCP Echo Server — Stream Splitting & Buffer Pipeline</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --line: #30363d;
+      --text: #e6edf3;
+      --text-muted: #7d8590;
+      --listener: #ffd43b;
+      --task: #4dabf7;
+      --pend: #ffa94d;
+      --ok: #51cf66;
+      --client: #9775fa;
+      --read: #4dabf7;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* NAVIGATION */
+    .nav-bar {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 16px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-link {
+      color: #58a6ff;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .nav-link:hover { text-decoration: underline; }
+
+    .nav-badge {
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+    }
+
+    h1 {
+      font-size: 16px;
+      color: var(--text);
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    button {
+      background: #238636;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    button:hover:not(:disabled) { background: #2ea043; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    button.btn-secondary {
+      background: #21262d;
+      border-color: var(--line);
+      color: var(--text);
+    }
+
+    #stage {
+      position: relative;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 22px;
+      min-height: 420px;
+      overflow: hidden;
+    }
+
+    #listener {
+      display: inline-block;
+      border: 2px solid var(--listener);
+      color: var(--listener);
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 18px;
+      background: #0d1117;
+      transition: all 0.3s;
+    }
+
+    #listener.active {
+      box-shadow: 0 0 0 3px rgba(255, 212, 59, 0.15), 0 0 22px -4px var(--listener);
+      transform: translateY(-2px);
+    }
+
+    #tasks {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .task {
+      border: 2px solid var(--task);
+      border-radius: 12px;
+      padding: 12px;
+      background: #0d1117;
+      width: 250px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all 0.35s ease;
+    }
+
+    .task.in { opacity: 1; transform: translateY(0); }
+    .task.done { border-color: var(--ok); }
+
+    .task .head {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .status {
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 6px;
+      background: #21262d;
+      color: var(--text-muted);
+      display: inline-block;
+      margin-bottom: 8px;
+    }
+
+    .status.pend { background: #3d2a00; color: var(--pend); }
+    .status.ok { background: #0f2e1a; color: var(--ok); }
+
+    .buf { display: flex; gap: 3px; margin: 8px 0; }
+    .slot {
+      flex: 1;
+      height: 24px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #010409;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      color: #484f58;
+      transition: all 0.25s;
+    }
+
+    .slot.data {
+      background: rgba(31, 111, 235, 0.3);
+      border-color: var(--read);
+      color: #e6edf3;
+      transform: scale(1.05);
+    }
+
+    .dot {
+      position: absolute;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #000;
+      pointer-events: none;
+      z-index: 99;
+      opacity: 0;
+      transform: scale(0.6);
+      transition: transform 0.8s cubic-bezier(0.34, 1.3, 0.64, 1), opacity 0.2s;
+    }
+
+    .dot.go {
+      opacity: 1;
+      transform: translate(var(--dx), var(--dy)) scale(1);
+    }
+
+    #log {
+      margin-top: 16px;
+      background: #010409;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      height: 160px;
+      overflow-y: auto;
+      font-size: 11px;
+    }
+
+    #log div {
+      padding: 2px 0;
+      border-bottom: 1px solid #161b22;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(-6px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .l-ls { color: var(--listener); }
+    .l-tk { color: var(--task); }
+    .l-pend { color: var(--pend); }
+    .l-ok { color: var(--ok); }
+    .l-cl { color: var(--client); }
+    .l-dim { color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <!-- NAVIGATION -->
+  <div class="nav-bar">
+    <a href="../index.html" class="nav-link">← Back to Tokio Runtime Studio (index.html)</a>
+    <span class="nav-badge">Module 05 · Stream Splitting & Echo Pipeline</span>
+  </div>
+
+  <!-- TITLE & CONTROLS -->
+  <h1>tokio TcpListener + spawn + read + write_all — Pipeline Animation</h1>
+  <div class="controls-row">
+    <button id="play">▶ Run Echo Pipeline</button>
+    <button class="btn-secondary" onclick="location.reload()">🔄 Reset</button>
+  </div>
+
+  <!-- STAGE -->
+  <div id="stage">
+    <div id="listener">
+      <div style="font-weight:700;">🎧 TcpListener · 127.0.0.1:8080</div>
+      <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">listener.accept().await → tokio::spawn(…)</div>
+    </div>
+    <div id="tasks"></div>
+  </div>
+
+  <!-- TELEMETRY LOG -->
+  <div id="log"></div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const stage = $('#stage'), tasksEl = $('#tasks'), logEl = $('#log');
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+
+    function log(m, c = '') {
+      const d = document.createElement('div');
+      d.className = c;
+      d.textContent = m;
+      logEl.appendChild(d);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function makeTask(id) {
+      const t = document.createElement('div');
+      t.className = 'task';
+      t.id = 'task' + id;
+      t.innerHTML = `
+        <div class="head"><b>🟦 TASK ${id}</b><span>spawned</span></div>
+        <div class="status" id="st${id}">⏸ Idle</div>
+        <div class="buf" id="buf${id}">
+          ${Array.from({length: 8}, (_, i) => `<div class="slot" id="s${id}_${i}">0</div>`).join('')}
+        </div>
+        <div style="font-size:10px; color:var(--text-muted); line-height:1.5;">
+          let mut buf = [0; 1024];<br>
+          socket.read(&amp;mut buf).await<br>
+          socket.write_all(&amp;buf[..n]).await
+        </div>
+      `;
+      tasksEl.appendChild(t);
+      return t;
+    }
+
+    function fly(fromEl, toEl, text, color, dur = 400) {
+      return new Promise(res => {
+        const a = fromEl.getBoundingClientRect(), b = toEl.getBoundingClientRect(), s = stage.getBoundingClientRect();
+        const d = document.createElement('div');
+        d.className = 'dot';
+        d.textContent = text;
+        d.style.background = color;
+        d.style.left = (a.left - s.left + a.width / 2) + 'px';
+        d.style.top  = (a.top  - s.top  + a.height / 2) + 'px';
+        d.style.setProperty('--dx', (b.left - a.left) + 'px');
+        d.style.setProperty('--dy', (b.top  - a.top ) + 'px');
+        stage.appendChild(d);
+        requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add('go')));
+        setTimeout(() => { d.remove(); res(); }, dur + 50);
+      });
+    }
+
+    function setStatus(id, text, cls = '') {
+      const el = $('#st' + id);
+      el.textContent = text;
+      el.className = 'status ' + cls;
+    }
+
+    async function run() {
+      $('#play').disabled = true;
+      tasksEl.innerHTML = '';
+      logEl.innerHTML = '';
+
+      log('🎧 listener = TcpListener::bind("127.0.0.1:8080").await', 'l-ls');
+      await wait(500);
+
+      const clients = [
+        { id: 1, msg: 'hi',    bytes: 2, color: '#9775fa' },
+        { id: 2, msg: 'hello', bytes: 5, color: '#63e6be' },
+        { id: 3, msg: 'ping!', bytes: 5, color: '#ffa94d' },
+      ];
+
+      for (const c of clients) {
+        log(`🔌 Client ${c.id} connects`, 'l-cl');
+        $('#listener').classList.add('active');
+        await wait(350);
+
+        const task = makeTask(c.id);
+        await wait(40);
+        task.classList.add('in');
+        log(`   tokio::spawn(handle(socket)) → Task ${c.id} active`, 'l-tk');
+        $('#listener').classList.remove('active');
+        await wait(350);
+
+        setStatus(c.id, '⏳ read().await — Pending', 'pend');
+        log(`   Task ${c.id}: socket.read(&mut buf).await → Poll::Pending 🛑`, 'l-pend');
+        await wait(600);
+
+        log(`   🌐 Client ${c.id} sends ${c.bytes} bytes: "${c.msg}"`, 'l-cl');
+        for (let i = 0; i < c.bytes; i++) {
+          await fly($('#listener'), task, 'byte', c.color, 280);
+          const slot = $(`#s${c.id}_${i}`);
+          if (slot) { slot.classList.add('data'); slot.textContent = '·'; }
+        }
+
+        setStatus(c.id, `✅ read → Ok(${c.bytes})`, 'ok');
+        log(`   Task ${c.id}: read returned Ok(${c.bytes})`, 'l-ok');
+        await wait(400);
+
+        setStatus(c.id, `↩ write_all(&buf[0..${c.bytes}])`, 'ok');
+        for (let i = 0; i < c.bytes; i++) {
+          const slot = $(`#s${c.id}_${i}`);
+          if (slot) await fly(slot, $('#listener'), 'echo', '#51cf66', 260);
+        }
+        log(`   ➡ Client ${c.id} received echo: "${c.msg}"`, 'l-ok');
+
+        task.classList.add('done');
+        setStatus(c.id, '✔ done', 'ok');
+        await wait(500);
+      }
+
+      log('✅ Echo server pipeline demonstrated without blocking!', 'l-ok');
+      $('#play').disabled = false;
+    }
+
+    $('#play').addEventListener('click', run);
+  </script>
+</body>
+</html>

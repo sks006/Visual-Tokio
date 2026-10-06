@@ -1,0 +1,21 @@
+{
+  "name": "tokio-visual-guide",
+  "version": "1.0.0",
+  "description": "Interactive visual animations and production Rust patterns for Tokio async runtime",
+  "scripts": {
+    "start": "npx serve . -l 8080",
+    "dev": "npx serve . -l 8080",
+    "test": "cargo test --all-targets"
+  },
+  "keywords": [
+    "tokio",
+    "rust",
+    "async",
+    "visualizer",
+    "reactor",
+    "tracing",
+    "concurrency"
+  ],
+  "author": "Tokio Visual Guide Contributors",
+  "license": "MIT OR Apache-2.0"
+}

@@ -1,677 +1,361 @@
-# 🎛️ Control Flow, I/O, and Debugging — Functions, Who, When, What + Animations
+# 🦀 Tokio Runtime Studio — Architecture, Visualizations & Production Guide
 
-Three topics, three complete breakdowns, three runnable animations. Each section has a **function table**, a **Who/When/What** card, a **Mermaid diagram**, and an **HTML animation** you can save and open.
+[![CI & Deployment](https://github.com/sks006/tokio/actions/workflows/ci.yml/badge.svg)](https://github.com/sks006/tokio/actions/workflows/ci.yml)
+[![Tokio](https://img.shields.io/badge/tokio-v1.43-orange.svg)](https://tokio.rs)
+[![Rust](https://img.shields.io/badge/rustc-1.80%2B-blue.svg)](https://www.rust-lang.org)
+[![License](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-green.svg)](LICENSE)
+[![Interactive Studio](https://img.shields.io/badge/interactive-web%20studio-38bdf8.svg)](index.html)
+
+A monolithic, production-grade visual guide and executable reference suite for **Tokio**, Rust's asynchronous runtime. This repository bridges theoretical async runtime concepts with **recorded video demonstrations**, **interactive browser animations**, **high-resolution architectural maps**, and **verified production Rust implementations**.
 
 ---
 
-# 🔀 Part 1 — Control Flow & Cancellation
+## 🚀 Quickstart
 
-## 📋 Functions & APIs
+### 1. Interactive Visual Studio & Video Catalog
+Open [`index.html`](index.html) directly in any modern web browser or run locally:
+```bash
+# Using Node / NPX
+npx serve .
 
-| Function / Macro | Signature | Purpose |
-|---|---|---|
-| `tokio::select!` | `select! { biased; branch = fut => {…}, … }` | Race futures; run the **first** one that completes, drop the rest |
-| `tokio::time::timeout` | `timeout(dur, fut) -> Result<T, Elapsed>` | Sugar over `select!` with a sleep |
-| `tokio::time::sleep` | `sleep(dur) -> Sleep` | Async delay — the "timer" arm |
-| `tokio::signal::ctrl_c` | `async fn ctrl_c() -> io::Result<()>` | Future resolved on SIGINT |
-| `tokio::signal::unix::signal` | `signal(SignalKind::terminate())` | Any Unix signal (SIGTERM, SIGHUP, …) |
-| `tokio::spawn` | `spawn(fut) -> JoinHandle<T>` | Spawn cancellable background task |
-| `JoinHandle::abort` | `handle.abort()` | Explicit cancellation |
-| `futures::future::select_all` | `select_all(iter) -> (Out, usize, Vec<F>)` | Race many, keep losers |
-| `tokio::sync::watch` | `watch::channel(init)` | Broadcast shutdown signal to many tasks |
-
-## 🧑 Who / ⏱️ When / 🎯 What
-
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontSize':'14px','lineColor':'#868e96'}}}%%
-flowchart LR
-    subgraph WHO["🧑 WHO"]
-        W1["tokio::select! — decision-maker"]
-        W2["Racing futures — the candidates"]
-        W3["Cancellation by drop"]
-    end
-    subgraph WHEN["⏱️ WHEN"]
-        T1["⏰ Timeouts<br/><i>5s max on a DB query</i>"]
-        T2["🛑 Graceful shutdown<br/><i>Ctrl+C / SIGTERM</i>"]
-        T3["🏁 Hedged requests<br/><i>first of N mirrors wins</i>"]
-    end
-    subgraph WHAT["🎯 WHAT"]
-        P1["Lazy futures do nothing<br/>until polled"]
-        P2["Dropping the future =<br/>cancellation + cleanup"]
-        P3["No leak — Drop runs<br/>automatically"]
-    end
-
-    classDef who fill:#4dabf7,stroke:#1864ab,stroke-width:2px,color:#fff
-    classDef when fill:#ffd43b,stroke:#e67700,stroke-width:2px,color:#000
-    classDef what fill:#51cf66,stroke:#2b8a3e,stroke-width:2px,color:#000
-    class W1,W2,W3 who
-    class T1,T2,T3 when
-    class P1,P2,P3 what
+# Or using Python 3
+python3 -m http.server 8080
 ```
 
-## 🔀 How `select!` decides
+| Module | Architectural Topic | Video Recording | Interactive Simulator |
+|---|---|---|---|
+| **01** | Control Flow & `select!` | [🎥 `select_animation.mp4`](asset/select_animation.mp4) | [🕹️ `01_select.html`](simulations/01_select.html) |
+| **02** | Async I/O & epoll Multiplexing | [🎥 `async_io_animation.mp4`](asset/async_io_animation.mp4) | [🕹️ `02_async_io.html`](simulations/02_async_io.html) |
+| **03** | Tracing & `tokio-console` | [🎥 `tracing_animation.mp4`](asset/tracing_animation.mp4) | [🕹️ `03_tracing.html`](simulations/03_tracing.html) |
+| **04** | Resilient `TcpListener` Accept Loop | [🎥 `accept_animation.mp4`](asset/accept_animation.mp4) | [🕹️ `04_accept.html`](simulations/04_accept.html) |
+| **05** | High-Performance TCP Echo Pipeline | [🎥 `echo_animation.mp4`](asset/echo_animation.mp4) | [🕹️ `05_echo.html`](simulations/05_echo.html) |
+| **06** | Bounded MPSC Channels & Permits | [🎥 `mpsc_animation.mp4`](asset/mpsc_animation.mp4) | [🕹️ `06_mpsc.html`](simulations/06_mpsc.html) |
+
+### 2. Monolithic Rust Executable Suite
+Run the companion production patterns directly from the unified CLI runner:
+```bash
+# Run the complete test suite & all 6 patterns sequentially
+cargo run -- all
+
+# Run specific architectural patterns:
+cargo run -- 1      # 01: tokio::select! & Cancellation by Drop
+cargo run -- 2      # 02: Async I/O & Reactor Multiplexing
+cargo run -- 3      # 03: Structured Tracing & Non-Blocking Rules
+cargo run -- 4      # 04: Resilient TcpListener Accept Loop
+cargo run -- 5      # 05: High-Performance TCP Echo Pipeline
+cargo run -- 6      # 06: Bounded MPSC Channels & Backpressure
+
+# Run automated tests
+cargo test
+```
+
+---
+
+## 🗺️ High-Resolution Architectural Maps
+
+The repository includes high-resolution infographics detailing the internal structure and lifecycle of the Tokio runtime:
+
+| Map | Preview | Details |
+|---|---|---|
+| **The Complete Map of Tokio** | [`asset/tokio_architecture_map.png`](asset/tokio_architecture_map.png) | High-resolution overview of Runtime, Reactor, Tasks, Schedulers, and I/O driver. |
+| **Tokio Task & Future Lifecycle** | [`asset/tokio_lifecycle_map.png`](asset/tokio_lifecycle_map.png) | Step-by-step state machine from task spawn to `Poll::Pending`, Waker registration, reactor event, and completion. |
+
+---
+
+## 🔀 Part 1 — Control Flow & Cancellation by Drop
+
+In asynchronous Rust, futures are **lazy**: they make no progress until polled. When racing futures inside `tokio::select!`, the runtime polls branches concurrently. Once any branch resolves to `Poll::Ready`, `select!` executes its arm and **immediately drops the remaining loser futures**.
+
+Dropping a future triggers Rust's RAII destructors: pending timers are cancelled in the runtime timing wheel, TCP sockets close, and memory buffers are freed without leaks.
+
+### 🎥 Video Demonstration
+<video src="asset/select_animation.mp4" controls width="100%"></video>
+
+> 🔗 **Direct Video Link**: [`asset/select_animation.mp4`](asset/select_animation.mp4)  
+> 🕹️ **Interactive Animation**: [`simulations/01_select.html`](simulations/01_select.html)
+
+### Decision Flowchart
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontSize':'13px','lineColor':'#868e96'}}}%%
 flowchart TD
     START["select! {<br/>&nbsp;&nbsp;r = db.query() => …<br/>&nbsp;&nbsp;_ = sleep(5s) => …<br/>}"] --> POLL["poll ALL branches<br/><i>in random or biased order</i>"]
-    POLL --> Q1{"which is Ready?"}
-    Q1 -->|"db.query() first ✅"| WIN["run its arm<br/><b>drop the sleep</b>"]
-    Q1 -->|"sleep(5s) first ✅"| TIMEOUT["run its arm<br/><b>drop the query future</b>"]
-    Q1 -->|"none yet"| PEND["Poll::Pending<br/>register wakers on all"]
-    PEND --> WAKE["🔔 any waker fires"]
+    POLL --> Q1{"Which future is Ready?"}
+    Q1 -->|"db.query() completes first ✅"| WIN["Execute query arm<br/><b>Drop sleep timer future</b>"]
+    Q1 -->|"sleep(5s) expires first ⏰"| TIMEOUT["Execute timeout arm<br/><b>Drop db.query future</b>"]
+    Q1 -->|"None yet"| PEND["Poll::Pending<br/>Register Wakers on reactor"]
+    PEND --> WAKE["🔔 Reactor or timer waker fires"]
     WAKE --> POLL
 
-    WIN --> CLEAN["🧹 dropped futures run Drop<br/>sockets close · buffers freed"]
+    WIN --> CLEAN["🧹 Dropped futures run Drop<br/>Sockets close · Buffers released"]
     TIMEOUT --> CLEAN
 
     classDef m fill:#ffd43b,stroke:#e67700,stroke-width:2px,color:#000
     classDef w fill:#51cf66,stroke:#2b8a3e,stroke-width:2px,color:#000
     classDef c fill:#4dabf7,stroke:#1864ab,stroke-width:2px,color:#fff
-
     class START,POLL,Q1,PEND m
     class WIN,TIMEOUT w
     class WAKE,CLEAN c
 ```
 
-## 🎥 Runnable Animation — `select.html`
-
-```html
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>tokio::select! — race & cancel</title>
-<style>
-  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--win:#51cf66;--lose:#ff6b6b;
-        --db:#4dabf7;--timer:#ffd43b;--pend:#ffa94d}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:#e6edf3;
-       font:13px/1.55 ui-monospace,Menlo,monospace;padding:20px}
-  h1{font-size:15px;color:#7d8590;font-weight:400;margin:0 0 14px;letter-spacing:.4px}
-  button{background:#238636;border:0;color:#fff;padding:8px 16px;border-radius:8px;
-         font:inherit;cursor:pointer;margin-right:8px;margin-bottom:14px}
-  button:disabled{opacity:.4;cursor:default}
-  label{font-size:12px;color:#7d8590;cursor:pointer;margin-right:14px}
-  #stage{position:relative;background:var(--panel);border:1px solid var(--line);
-         border-radius:14px;padding:22px;min-height:360px}
-  .branch{display:flex;align-items:center;gap:14px;margin-bottom:14px;
-          border:2px solid var(--line);border-radius:10px;padding:12px;
-          transition:.35s;background:#0d1117}
-  .branch.db{border-color:var(--db)} .branch.timer{border-color:var(--timer)}
-  .branch.win{border-color:var(--win);box-shadow:0 0 22px -4px var(--win);
-              background:#0f2e1a}
-  .branch.lose{border-color:var(--lose);opacity:.35;background:#2a0f0f}
-  .name{width:130px;font-weight:700}
-  .name.db{color:var(--db)} .name.timer{color:var(--timer)}
-  .bar{flex:1;height:22px;background:#21262d;border-radius:6px;overflow:hidden}
-  .bar>div{height:100%;width:0;transition:width .25s linear}
-  .bar.db>div{background:var(--db)}
-  .bar.timer>div{background:var(--timer)}
-  .status{width:120px;font-size:11px;text-align:right;color:#7d8590}
-  .status.pend{color:var(--pend)} .status.win{color:var(--win)} .status.lose{color:var(--lose)}
-  #log{margin-top:14px;background:#010409;border:1px solid var(--line);
-       border-radius:10px;padding:10px;height:150px;overflow:auto;font-size:11px}
-  #log div{padding:1px 0;border-bottom:1px solid #161b22;animation:in .3s}
-  @keyframes in{from{opacity:0;transform:translateX(-6px)}}
-  .lv-ok{color:var(--win)} .lv-err{color:var(--lose)} .lv-pend{color:var(--pend)}
-  .lv-dim{color:#7d8590}
-</style></head><body>
-<h1>tokio::select! { db.query() =&gt; … , sleep(5s) =&gt; … }</h1>
-<button id="play">▶ Race</button>
-<label><input type="checkbox" id="dbWins" checked> DB responds fast</label>
-
-<div id="stage">
-  <div class="branch db" id="bDb">
-    <div class="name db">🔵 db.query()</div>
-    <div class="bar db"><div id="dbBar"></div></div>
-    <div class="status pend" id="dbSt">pending</div>
-  </div>
-  <div class="branch timer" id="bTimer">
-    <div class="name timer">🟡 sleep(5s)</div>
-    <div class="bar timer"><div id="tBar"></div></div>
-    <div class="status pend" id="tSt">pending</div>
-  </div>
-</div>
-<div id="log"></div>
-<script>
-const $=s=>document.querySelector(s), logEl=$('#log');
-const wait=ms=>new Promise(r=>setTimeout(r,ms));
-function log(m,c=''){const d=document.createElement('div');d.className=c;d.textContent=m;
-  logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
-function setStatus(el,t,c){el.textContent=t;el.className='status '+c;}
-
-async function run(){
-  $('#play').disabled=true; logEl.innerHTML='';
-  $('#bDb').className='branch db'; $('#bTimer').className='branch timer';
-  $('#dbBar').style.width='0%'; $('#tBar').style.width='0%';
-  setStatus($('#dbSt'),'pending','pend'); setStatus($('#tSt'),'pending','pend');
-
-  const dbFast = $('#dbWins').checked;
-  const dbDur = dbFast ? 1800 : 99999;    // 1.8s "fast" or effectively never
-  const timerDur = 5000;
-
-  log('▶ entering select! — polling all branches', 'lv-dim');
-  await wait(300);
-  log('   db.query() → Poll::Pending 🛑 · registered waker', 'lv-pend');
-  log('   sleep(5s)  → Poll::Pending 🛑 · registered waker', 'lv-pend');
-  await wait(200);
-
-  log('⏳ both branches racing…', 'lv-dim');
-  const t0=performance.now();
-  let winner=null;
-
-  while(!winner){
-    const el = performance.now()-t0;
-    const dbPct = Math.min(100, el/dbDur*100);
-    const tPct  = Math.min(100, el/timerDur*100);
-    $('#dbBar').style.width=dbPct+'%';
-    $('#tBar').style.width=tPct+'%';
-    if (dbPct>=100 && winner===null) winner='db';
-    if (tPct >=100 && winner===null) winner='timer';
-    await wait(40);
-  }
-
-  if(winner==='db'){
-    $('#bDb').classList.add('win'); setStatus($('#dbSt'),'✅ Ready','win');
-    $('#bTimer').classList.add('lose'); setStatus($('#tSt'),'❌ dropped','lose');
-    log('🔵 db.query() returned Ready ✅', 'lv-ok');
-    log('   select! runs its arm', 'lv-ok');
-    log('   🧹 sleep(5s) future DROPPED — no leak', 'lv-dim');
-    log('✅ got the answer in ~1.8s, saved 3.2s', 'lv-ok');
-  } else {
-    $('#bTimer').classList.add('win'); setStatus($('#tSt'),'✅ Ready','win');
-    $('#bDb').classList.add('lose'); setStatus($('#dbSt'),'❌ dropped','lose');
-    log('🟡 sleep(5s) fired first ✅', 'lv-ok');
-    log('   select! runs the timeout arm', 'lv-ok');
-    log('   🧹 db.query() future DROPPED — TCP socket closed, buffers freed', 'lv-err');
-    log('⏰ TIMEOUT — but the runtime is NOT stuck', 'lv-ok');
-  }
-  $('#play').disabled=false;
+### Production Pattern
+```rust
+tokio::select! {
+    result = db_query().await => {
+        println!("Query resolved: {result:?}");
+        // Timer future dropped automatically
+    }
+    _ = tokio::time::sleep(Duration::from_secs(5)).await => {
+        eprintln!("Query timed out after 5s!");
+        // db_query() future dropped: socket closed, connection aborted cleanly
+    }
 }
-$('#play').addEventListener('click',run);
-</script></body></html>
 ```
 
 ---
 
-# 🔌 Part 2 — Asynchronous I/O
+## ⚡ Part 2 — Asynchronous I/O & OS Reactor Multiplexing
 
-## 📋 Functions & APIs
+Traditional thread-per-connection architectures scale poorly: 10,000 idle threads consume gigabytes of stack memory and saturate kernel context-switching.
 
-| Function / Trait | Where | Purpose |
-|---|---|---|
-| `TcpListener::bind(addr)` | `tokio::net` | Create async listening socket |
-| `TcpListener::accept()` | `tokio::net` | Await the next incoming connection (cancel-safe) |
-| `TcpStream::read(&mut buf)` | `AsyncReadExt` | Non-blocking read — returns `Ok(n)` bytes |
-| `TcpStream::write_all(&buf)` | `AsyncWriteExt` | Non-blocking write loop — guaranteed all bytes |
-| `TcpStream::split()` | `tokio::net` | Split into owned read + write halves for concurrent use |
-| `BufReader::new(stream)` | `tokio::io` | Add buffering (`.read_line()`, `.lines()`) |
-| `tokio::io::copy(&mut r, &mut w)` | `tokio::io` | Zero-copy-ish piping between any `AsyncRead`/`AsyncWrite` |
-| `tokio::spawn(fut)` | runtime | One task per connection |
-| `TcpStream::set_nodelay(true)` | `tokio::net` | Disable Nagle for low-latency protocols |
+Tokio solves this using **non-blocking I/O multiplexing** (`epoll` on Linux, `kqueue` on macOS, `IOCP` on Windows). A tiny pool of worker threads can effortlessly service tens of thousands of idle connections. When a socket returns `WouldBlock`, the task parks, saves its `Waker`, and yields the thread. The OS reactor wakes only the exact task whose descriptor becomes readable.
 
-## 🧑 Who / ⏱️ When / 🎯 What
+### 🎥 Video Demonstration
+<video src="asset/async_io_animation.mp4" controls width="100%"></video>
+
+> 🔗 **Direct Video Link**: [`asset/async_io_animation.mp4`](asset/async_io_animation.mp4)  
+> 🕹️ **Interactive Animation**: [`simulations/02_async_io.html`](simulations/02_async_io.html)
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontSize':'14px','lineColor':'#868e96'}}}%%
-flowchart LR
-    subgraph WHO["🧑 WHO"]
-        W1["TcpListener — accepts"]
-        W2["tokio::spawn — one task<br/>per connection"]
-        W3["AsyncReadExt / AsyncWriteExt<br/>traits on TcpStream"]
-        W4["Reactor (epoll/kqueue/IOCP)"]
-    end
-    subgraph WHEN["⏱️ WHEN"]
-        T1["🌐 Web servers"]
-        T2["💬 Chat / pub-sub"]
-        T3["🔁 Reverse proxies"]
-        T4["📡 Any high-connection<br/>low-CPU service"]
-    end
-    subgraph WHAT["🎯 WHAT"]
-        P1["Syscall returns WouldBlock<br/>→ yield thread, park task"]
-        P2["One worker thread juggles<br/>thousands of fds"]
-        P3["CPU cycles spent only on<br/><b>actual</b> data, never waiting"]
-    end
-
-    classDef who fill:#4dabf7,stroke:#1864ab,stroke-width:2px,color:#fff
-    classDef when fill:#ffd43b,stroke:#e67700,stroke-width:2px,color:#000
-    classDef what fill:#51cf66,stroke:#2b8a3e,stroke-width:2px,color:#000
-    class W1,W2,W3,W4 who
-    class T1,T2,T3,T4 when
-    class P1,P2,P3 what
-```
-
-## 🔌 Sync vs async — why the thread never blocks
-
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontSize':'13px','lineColor':'#868e96'}}}%%
 flowchart TB
-    subgraph SYNC["❌ Synchronous — 1 thread per connection"]
-        S1["thread 1"] --> SOCK1["socket 1<br/>💤 blocked in read()"]
-        S2["thread 2"] --> SOCK2["socket 2<br/>💤 blocked in read()"]
-        S3["thread 3"] --> SOCK3["socket 3<br/>💤 blocked in read()"]
-        S4["… 10,000 threads?<br/>🔴 stack overflow / OOM"]
+    subgraph SYNC["❌ Synchronous — 1 Thread Per Connection"]
+        S1["Thread 1"] --> SOCK1["Socket 1: blocked in read()"]
+        S2["Thread 2"] --> SOCK2["Socket 2: blocked in read()"]
+        S3["Thread 3"] --> SOCK3["Socket 3: blocked in read()"]
+        S4["10,000 Threads?"] --> OOM["🔴 Stack exhaustion / OOM"]
     end
-    subgraph ASYNC["✅ Async — 1 thread, 10,000 sockets"]
-        A1["worker thread"] --> MUX["Reactor<br/>epoll_wait()"]
-        MUX --> A2["socket 1 · parked"]
-        MUX --> A3["socket 2 · parked"]
-        MUX --> A4["socket 3 · parked"]
-        MUX --> A5["… · parked"]
-        MUX --> A6["🔔 socket 47 has data<br/>→ wake only that task"]
+    subgraph ASYNC["✅ Async Tokio — 1 Worker Thread, 10,000 Sockets"]
+        A1["Worker Thread"] --> MUX["Reactor (epoll_wait)"]
+        MUX --> A2["Socket 1 · parked"]
+        MUX --> A3["Socket 2 · parked"]
+        MUX --> A4["Socket 3 · parked"]
+        MUX --> A6["🔔 Socket 47 has data<br/>→ wake only Task 47"]
     end
 
     classDef bad fill:#ff6b6b,stroke:#c92a2a,stroke-width:2px,color:#fff
     classDef good fill:#51cf66,stroke:#2b8a3e,stroke-width:2px,color:#000
     classDef mid fill:#4dabf7,stroke:#1864ab,stroke-width:2px,color:#fff
-
-    class S1,S2,S3,S4,SOCK1,SOCK2,SOCK3 bad
-    class A1,A2,A3,A4,A5,A6 good
+    class S1,S2,S3,S4,SOCK1,SOCK2,SOCK3,OOM bad
+    class A1,A2,A3,A4,A6 good
     class MUX mid
 ```
 
-## 🎥 Runnable Animation — `async_io.html`
-
-```html
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Async I/O — 1 thread, N sockets</title>
-<style>
-  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--thread:#4dabf7;
-        --sock:#9775fa;--park:#6c757d;--ready:#51cf66;--wake:#ffd43b}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:#e6edf3;
-       font:13px/1.55 ui-monospace,Menlo,monospace;padding:20px}
-  h1{font-size:15px;color:#7d8590;font-weight:400;margin:0 0 14px}
-  button{background:#238636;border:0;color:#fff;padding:8px 16px;border-radius:8px;
-         font:inherit;cursor:pointer;margin-bottom:14px}
-  button:disabled{opacity:.4;cursor:default}
-  #stage{position:relative;background:var(--panel);border:1px solid var(--line);
-         border-radius:14px;padding:20px;min-height:420px}
-  .center{display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:18px}
-  #thread{border:3px solid var(--thread);color:var(--thread);border-radius:12px;
-          padding:12px 22px;font-weight:700;text-align:center;transition:.3s}
-  #thread.busy{box-shadow:0 0 30px -4px var(--thread);transform:scale(1.06)}
-  #thread.idle{border-color:var(--park);color:var(--park);opacity:.55}
-  #reactor{border:2px dashed var(--wake);color:var(--wake);border-radius:10px;
-           padding:8px 18px;font-size:12px}
-  #reactor.fire{background:#3d2a00;box-shadow:0 0 22px -4px var(--wake)}
-  #sockets{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-top:14px}
-  .sk{position:relative;border:2px solid var(--sock);border-radius:8px;padding:8px 6px;
-      text-align:center;font-size:10px;background:#0d1117;transition:.4s}
-  .sk .id{font-weight:700;color:var(--sock)}
-  .sk .state{font-size:9px;color:#7d8590;margin-top:4px}
-  .sk.parked{border-color:var(--park);opacity:.5}
-  .sk.parked .id{color:var(--park)}
-  .sk.ready{border-color:var(--ready);box-shadow:0 0 16px -3px var(--ready);
-            background:#0f2e1a}
-  .sk.ready .id{color:var(--ready)}
-  .sk.pumping{animation:pulse .5s infinite alternate}
-  @keyframes pulse{from{transform:scale(1)}to{transform:scale(1.07)}}
-  #log{margin-top:16px;background:#010409;border:1px solid var(--line);
-       border-radius:10px;padding:10px;height:150px;overflow:auto;font-size:11px}
-  #log div{padding:1px 0;border-bottom:1px solid #161b22;animation:in .3s}
-  @keyframes in{from{opacity:0;transform:translateX(-6px)}}
-  .lv-ok{color:var(--ready)} .lv-park{color:var(--park)} .lv-wake{color:var(--wake)}
-  .lv-dim{color:#7d8590}
-</style></head><body>
-<h1>One worker thread · one epoll reactor · 16 parked sockets</h1>
-<button id="play">▶ Run</button>
-<div id="stage">
-  <div class="center">
-    <div id="thread">🧵 worker thread</div>
-    <div id="reactor">⚛️ reactor · epoll_wait()</div>
-  </div>
-  <div id="sockets"></div>
-</div>
-<div id="log"></div>
-<script>
-const $=s=>document.querySelector(s), logEl=$('#log'), sockets=$('#sockets');
-const wait=ms=>new Promise(r=>setTimeout(r,ms));
-function log(m,c=''){const d=document.createElement('div');d.className=c;d.textContent=m;
-  logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
-for(let i=1;i<=16;i++){
-  const s=document.createElement('div');
-  s.className='sk';s.id='sk'+i;
-  s.innerHTML=`<div class="id">🔌 ${i}</div><div class="state">idle</div>`;
-  sockets.appendChild(s);
-}
-async function run(){
-  $('#play').disabled=true;logEl.innerHTML='';
-  document.querySelectorAll('.sk').forEach(s=>{
-    s.className='sk'; s.querySelector('.state').textContent='idle';});
-  $('#thread').className=''; $('#reactor').className=''; $('#thread').textContent='🧵 worker thread';
-
-  log('🔌 16 clients connect · 16 tasks spawned', 'lv-dim');
-  await wait(400);
-  $('#thread').textContent='🧵 worker · running 16 tasks';
-  for(let i=1;i<=16;i++){
-    await wait(60);
-    log(`   task ${i}: socket.read(&mut buf).await → Pending 🛑`, 'lv-park');
-    const s=$('#sk'+i); s.classList.add('parked');
-    s.querySelector('.state').textContent='parked';
-  }
-  await wait(400);
-
-  log('😴 all 16 parked · thread fully free', 'lv-park');
-  $('#thread').classList.add('idle');
-  $('#thread').textContent='🧵 worker · idle 💤';
-  await wait(700);
-
-  // random wakeups
-  log('⚛️ reactor: epoll_wait() — no data yet', 'lv-wake');
-  $('#reactor').classList.add('fire');
-  await wait(800);
-  $('#reactor').classList.remove('fire');
-
-  const arrivals=[3,7,11,14];
-  for(const n of arrivals){
-    log(`⚛️ reactor: fd ${n} readable → waker.wake()`, 'lv-wake');
-    $('#reactor').classList.add('fire');
-    const s=$('#sk'+n);
-    s.classList.remove('parked'); s.classList.add('ready','pumping');
-    s.querySelector('.state').textContent='data!';
-    await wait(180);
-    $('#reactor').classList.remove('fire');
-
-    $('#thread').classList.remove('idle');
-    $('#thread').classList.add('busy');
-    $('#thread').textContent=`🧵 worker · polling task ${n}`;
-    log(`   ▶ thread runs task ${n} ONLY`, 'lv-ok');
-    await wait(400);
-    log(`   task ${n}: read → Ok(n), write_all → echo ✅`, 'lv-ok');
-    s.classList.remove('pumping','ready');
-    s.querySelector('.state').textContent='parked again';
-    await wait(200);
-    s.classList.add('parked');
-    $('#thread').classList.remove('busy');
-    $('#thread').classList.add('idle');
-    $('#thread').textContent='🧵 worker · idle 💤';
-    await wait(300);
-  }
-
-  log('✅ 16 sockets handled by ONE thread · no blocking', 'lv-ok');
-  $('#thread').classList.remove('idle');
-  $('#thread').textContent='🧵 worker thread';
-  $('#play').disabled=false;
-}
-$('#play').addEventListener('click',run);
-</script></body></html>
-```
-
 ---
 
-# 🐛 Part 3 — Tracing & Debugging
+## 🔍 Part 3 — Observability & `tokio-console`
 
-## 📋 Functions, Macros & APIs
+Asynchronous bugs rarely crash; they **hang**. If a developer calls `std::thread::sleep` or acquires a blocking `std::sync::Mutex` inside an async task, that entire worker thread stalls, starving every other task scheduled on the same thread.
 
-| Item | Kind | Purpose |
-|---|---|---|
-| `tracing::info!` / `warn!` / `error!` / `debug!` / `trace!` | macro | Emit a **structured event** at a level |
-| `tracing::info_span!("name", field = val)` | macro | Create a **span** — a period of time with context |
-| `#[tracing::instrument]` | attribute | Auto-wrap an async fn in a span |
-| `.instrument(span)` | trait method | Attach a span to a future so every poll enters it |
-| `tracing_subscriber::fmt().init()` | fn | Install the default pretty subscriber |
-| `tracing_subscriber::registry().with(...)` | builder | Compose layers (fmt + json + OTLP) |
-| `EnvFilter::from_default_env()` | type | `RUST_LOG=info,my_crate=debug` control |
-| `%value` sigil | macro syntax | Log using `Display` |
-| `?value` sigil | macro syntax | Log using `Debug` |
-| `skip(x)` in `#[instrument]` | attribute arg | Don't record this arg as a field |
-| `console_subscriber::init()` | fn | Install the tokio-console subscriber |
-| `tokio-console` | binary | Live TUI dashboard for tasks, polls, busy%, idle% |
+Using `tracing` and `tokio-console`, you monitor real-time task telemetry:
 
-## 🧑 Who / ⏱️ When / 🎯 What
+### 🎥 Video Demonstration
+<video src="asset/tracing_animation.mp4" controls width="100%"></video>
+
+> 🔗 **Direct Video Link**: [`asset/tracing_animation.mp4`](asset/tracing_animation.mp4)  
+> 🕹️ **Interactive Animation**: [`simulations/03_tracing.html`](simulations/03_tracing.html)
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontSize':'14px','lineColor':'#868e96'}}}%%
-flowchart LR
-  subgraph WHO["🧑 WHO"]
-    W1["<b>tracing</b> crate<br/><i>macros + Span + Event + Field</i>"]
-    W2["<b>tracing_subscriber</b><br/><i>the sink</i>"]
-    W3["<b>tokio-console</b><br/><i>live TUI dashboard</i>"]
-    W4["Layers: fmt / json / OTLP / custom"]
-  end
-
-  subgraph WHEN["⏱️ WHEN"]
-    T1["🟢 From day 1 — always"]
-    T2["🔴 When the runtime<br/>'hangs' — hunt for blocking"]
-    T3["🔍 When you need to<br/>correlate across services"]
-  end
-
-  subgraph WHAT["🎯 WHAT"]
-    P1["Spans ⏱️ — a period of time<br/><i>connection lifecycle</i>"]
-    P2["Fields 🏷️ — key/value identity<br/><i>peer=1.2.3.4:55112</i>"]
-    P3["Events 📝 — the log message<br/><i>info!(bytes=n, 'echoed')</i>"]
-    P4["Busy% / Idle% per task<br/>→ exposes blocking work"]
-  end
-
-  classDef who fill:#4dabf7,stroke:#1864ab,stroke-width:2px,color:#fff
-  classDef when fill:#ffd43b,stroke:#e67700,stroke-width:2px,color:#000
-  classDef what fill:#51cf66,stroke:#2b8a3e,stroke-width:2px,color:#000
-  class W1,W2,W3,W4 who
-  class T1,T2,T3 when
-  class P1,P2,P3,P4 what
-```
-
-## 🐛 What tokio-console reveals
-
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontSize':'13px','lineColor':'#868e96'}}}%%
 flowchart TD
-    APP["🦀 your app<br/>console_subscriber::init()"] -->|"tracing events"| TC["📺 tokio-console"]
+    APP["🦀 Async Application<br/>tracing::info_span!"] -->|"Events / Spans"| TC["📺 tokio-console Dashboard"]
+    TC --> T1["task{id=1 route=/api/user}<br/>Busy: 40μs · Idle: 2.1s · Polls: 4"]
+    TC --> T2["task{id=2 route=/api/compute}<br/>🔴 Busy: 1.4s · Idle: 10ms · Polls: 1"]
 
-    TC --> T1["connection{id=1 peer=1.2.3.4:55112}<br/>BUSY 0.4ms · IDLE 3.2s · polls 8"]
-    TC --> T2["connection{id=2 peer=1.2.3.4:55231}<br/>🔴 BUSY <b>1.4s</b> · IDLE 20ms · polls 2"]
-    TC --> T3["background_flush<br/>🔴 NO POLL in 45s · state: Idle"]
-
-    T1 --> OK["✅ healthy — μs polls, s parked"]
-    T2 --> BAD1["🔥 BLOCKING the runtime<br/>→ move sync work to<br/>tokio::task::spawn_blocking"]
-    T3 --> BAD2["🧟 STUCK — lost waker<br/>or deadlock — inspect Location"]
+    T1 --> OK["✅ Healthy task: microseconds of CPU, seconds parked"]
+    T2 --> BAD["🔥 STALLING WORKER THREAD<br/>→ Offload to tokio::task::spawn_blocking!"]
 
     classDef ok fill:#51cf66,stroke:#2b8a3e,stroke-width:2px,color:#000
-    classDef bad fill:#ff6b6b,stroke:#c92a2a,stroke-width:3px,color:#fff
-    classDef tool fill:#4dabf7,stroke:#1864ab,stroke-width:2px,color:#fff
-    classDef dim fill:#6c757d,stroke:#343a40,stroke-width:2px,color:#fff
-
+    classDef bad fill:#ff6b6b,stroke:#c92a2a,stroke-width:2px,color:#fff
     class T1,OK ok
-    class T2,T3,BAD1,BAD2 bad
-    class TC tool
-    class APP dim
+    class T2,BAD bad
 ```
 
-## 🎥 Runnable Animation — `tracing.html`
+### The Golden Rule:
+> **Never perform blocking computation or sync I/O directly in an async task.**  
+> Move CPU-heavy work to `tokio::task::spawn_blocking`:
+```rust
+// ✅ Proper offloading to dedicated threadpool
+let result = tokio::task::spawn_blocking(move || {
+    heavy_cpu_crypto_or_disk_operation()
+}).await?;
+```
 
-```html
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Tracing & tokio-console — spot the blocked task</title>
-<style>
-  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--ok:#51cf66;--warn:#ffd43b;
-        --bad:#ff6b6b;--span:#4dabf7;--field:#d2a8ff}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:#e6edf3;
-       font:12.5px/1.55 ui-monospace,Menlo,monospace;padding:20px}
-  h1{font-size:15px;color:#7d8590;font-weight:400;margin:0 0 14px}
-  button{background:#238636;border:0;color:#fff;padding:8px 16px;border-radius:8px;
-         font:inherit;cursor:pointer;margin-bottom:14px}
-  button:disabled{opacity:.4;cursor:default}
-  #stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;
-         padding:14px;min-height:400px}
-  #hdr{display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 1fr 1fr;
-       gap:8px;padding:6px 8px;font-size:10px;color:#7d8590;
-       border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.5px}
-  .row{display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 1fr 1fr;gap:8px;
-       padding:8px;border-bottom:1px solid #161b22;align-items:center;
-       font-size:11px;transition:.4s;animation:in .35s}
-  @keyframes in{from{opacity:0;transform:translateY(-4px)}}
-  .row.healthy{color:#c9d1d9}
-  .row.blocked{background:#2a0f0f;border-left:3px solid var(--bad);
-               box-shadow:inset 0 0 22px -8px var(--bad)}
-  .row.stuck{background:#2a1a0f;border-left:3px solid var(--warn);
-             box-shadow:inset 0 0 22px -8px var(--warn)}
-  .name{color:var(--span);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .busy{color:#c9d1d9;text-align:right;font-variant-numeric:tabular-nums}
-  .busy.hot{color:var(--bad);font-weight:700}
-  .idle{color:#c9d1d9;text-align:right;font-variant-numeric:tabular-nums}
-  .idle.cold{color:var(--warn);font-weight:700}
-  .polls{color:#7d8590;text-align:right}
-  .warn{font-size:10px}
-  .warn.y{color:var(--bad)} .warn.w{color:var(--warn)} .warn.g{color:var(--ok)}
-  .warn.d{color:#7d8590}
-  #verdict{margin-top:14px;padding:10px;border-radius:8px;background:#010409;
-           border:1px solid var(--line);font-size:11px;min-height:52px}
-  #verdict b{color:var(--bad)}
-</style></head><body>
-<h1>tokio-console — live task dashboard · watch Busy time</h1>
-<button id="play">▶ Stream events</button>
-<div id="stage">
-  <div id="hdr">
-    <div>task</div><div style="text-align:right">busy</div>
-    <div style="text-align:right">idle</div><div style="text-align:right">polls</div>
-    <div style="text-align:right">state</div><div>warn</div>
-  </div>
-  <div id="rows"></div>
-  <div id="verdict">// waiting for events…</div>
-</div>
-<script>
-const $=s=>document.querySelector(s), rows=$('#rows'), verdict=$('#verdict');
-const wait=ms=>new Promise(r=>setTimeout(r,ms));
+---
 
-const tasks=[
-  { name:'connection{id=1 peer=1.2.3.4:55112}', busy:0, idle:0, polls:0, state:'Idle',  cls:'' },
-  { name:'connection{id=2 peer=1.2.3.4:55231}', busy:0, idle:0, polls:0, state:'Idle',  cls:'' },
-  { name:'connection{id=3 peer=10.0.0.9:41002}',busy:0, idle:0, polls:0, state:'Idle',  cls:'' },
-  { name:'background_flush',                    busy:0, idle:0, polls:0, state:'Idle',  cls:'' },
-];
+## 🛡️ Part 4 — Resilient `TcpListener` Accept Loop
 
-function fmt(us){
-  if(us<1000) return us+'μs';
-  if(us<1_000_000) return (us/1000).toFixed(1)+'ms';
-  return (us/1_000_000).toFixed(2)+'s';
+A common rookie pitfall is:
+```rust
+// ❌ NAIVE: Exits loop permanently if a transient OS error occurs!
+while let Ok((socket, addr)) = listener.accept().await {
+    tokio::spawn(handle(socket));
 }
-function render(){
-  rows.innerHTML='';
-  for(const t of tasks){
-    const r=document.createElement('div');
-    r.className='row '+t.cls;
-    const hot = t.busy > 200_000;                // > 200ms busy = RED
-    const cold = (t.state==='Idle' && t.idle > 40_000_000); // > 40s idle = YELLOW
-    r.innerHTML=`
-      <div class="name">${t.name}</div>
-      <div class="busy ${hot?'hot':''}">${fmt(t.busy)}</div>
-      <div class="idle ${cold?'cold':''}">${fmt(t.idle)}</div>
-      <div class="polls">${t.polls}</div>
-      <div class="polls">${t.state}</div>
-      <div class="warn ${hot?'y':cold?'w':'g'}">${hot?'🔥 blocking':cold?'⚠ stuck':t.polls?'✓ ok':'—'}</div>`;
-    rows.appendChild(r);
-  }
-}
+```
 
-async function run(){
-  $('#play').disabled=true;
-  for(const t of tasks){t.busy=0;t.idle=0;t.polls=0;t.state='Idle';t.cls='';}
-  render();
-  verdict.textContent='// streaming…';
+In production networks, clients frequently abort handshakes (`ECONNABORTED`), or the process temporarily hits file descriptor limits (`EMFILE`). The naive `while let Ok` loop exits immediately on error, **killing the entire server**.
 
-  // Phase 1 — normal tasks behaving
-  for(let round=0;round<3;round++){
-    for(const t of [tasks[0],tasks[2]]){
-      t.state='Running'; render(); await wait(120);
-      t.busy += 300; t.polls += 1;
-      t.state='Idle';    render(); await wait(200);
-      t.idle += 1_200_000 + Math.random()*800_000;
-      render(); await wait(120);
+### 🎥 Video Demonstration
+<video src="asset/accept_animation.mp4" controls width="100%"></video>
+
+> 🔗 **Direct Video Link**: [`asset/accept_animation.mp4`](asset/accept_animation.mp4)  
+> 🕹️ **Interactive Animation**: [`simulations/04_accept.html`](simulations/04_accept.html)
+
+### Production Resilient Pattern
+```rust
+loop {
+    match listener.accept().await {
+        Ok((socket, peer)) => {
+            tokio::spawn(handle_connection(socket, peer));
+        }
+        Err(err) => {
+            match err.kind() {
+                std::io::ErrorKind::ConnectionAborted
+                | std::io::ErrorKind::Interrupted => {
+                    tracing::warn!(error = %err, "Transient network abort; retrying");
+                    continue;
+                }
+                std::io::ErrorKind::WouldBlock => {
+                    // Backoff briefly to allow OS table recovery
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    continue;
+                }
+                fatal => {
+                    tracing::error!(error = %fatal, "Fatal listener error; terminating");
+                    break;
+                }
+            }
+        }
     }
-  }
-
-  // Phase 2 — task 2 starts blocking (sync mutex / thread::sleep)
-  tasks[1].state='Running';
-  tasks[1].cls='';
-  render();
-  await wait(200);
-  for(let i=0;i<6;i++){
-    tasks[1].busy += 220_000;   // each poll burning 220ms
-    tasks[1].polls += 1;
-    render();
-    await wait(250);
-  }
-  tasks[1].cls='blocked'; tasks[1].state='Idle';
-  render();
-  verdict.innerHTML=
-    '🔥 <b>connection{id=2}</b> — poll took <b>1.32s</b>. ' +
-    'Every other task scheduled on that worker thread stalled. ' +
-    '→ move the sync work into <code>tokio::task::spawn_blocking</code>.';
-  await wait(1200);
-
-  // Phase 3 — background_flush goes silent
-  tasks[3].idle += 60_000_000;   // 60s without a poll
-  tasks[3].cls='stuck';
-  render();
-  verdict.innerHTML +=
-    '<br>⚠ <b>background_flush</b> — <b>no poll in 60s</b>, still Idle. ' +
-    'Possible lost waker, deadlock, or waiting on an event that will never fire.';
-  await wait(500);
-
-  tasks[3].cls='';
-  $('#play').disabled=false;
 }
-$('#play').addEventListener('click',run);
-render();
-</script></body></html>
 ```
 
 ---
 
-## 🧭 The complete map
+## 🔁 Part 5 — High-Performance TCP Echo Pipeline
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontSize':'14px','lineColor':'#868e96'}}}%%
-mindmap
-  root((Async Rust<br/>Trio))
-    Control Flow
-      tokio::select!
-        race futures
-        drop losers
-        cancellation
-      timeout
-        select + sleep
-      signal
-        ctrl_c
-        SIGTERM
-      spawn + abort
-    Async I/O
-      TcpListener
-        bind
-        accept
-      TcpStream
-        read → Ok(n)
-        write_all
-        split
-      spawn per connection
-      Reactor epoll
-    Tracing
-      Span ⏱️
-        info_span!
-        instrument
-        .instrument(fut)
-      Fields 🏷️
-        peer = %addr
-        bytes = n
-      Events 📝
-        info! warn! error!
-      tokio-console
-        Busy %
-        Idle %
-        polls
-        Location
+Splitting a `TcpStream` into owned or borrowed halves enables concurrent, non-blocking reads and writes without mutex contention:
+
+### 🎥 Video Demonstration
+<video src="asset/echo_animation.mp4" controls width="100%"></video>
+
+> 🔗 **Direct Video Link**: [`asset/echo_animation.mp4`](asset/echo_animation.mp4)  
+> 🕹️ **Interactive Animation**: [`simulations/05_echo.html`](simulations/05_echo.html)
+
+```rust
+// Split stream into reader and writer halves
+let (mut reader, mut writer) = stream.split();
+
+// Zero-copy asynchronous piping
+tokio::io::copy(&mut reader, &mut writer).await?;
 ```
 
 ---
 
-## 🎯 Summary
+## 📬 Part 6 — Bounded MPSC Channels & Backpressure
 
-| Topic | Core function | Who owns it | When to reach for it | What it buys you |
-|---|---|---|---|---|
-| **Cancellation** | `tokio::select!` | The racing futures | Timeouts · shutdown · hedging | Instant, safe cancel by drop |
-| **Async I/O** | `TcpListener` + `AsyncReadExt`/`AsyncWriteExt` | `tokio::net`, one `spawn` per connection | Web servers, chat, proxies | 1 thread, 10,000 sockets, no blocking |
-| **Tracing** | `info_span!`, `#[instrument]`, `console_subscriber::init()` | `tracing` + `tokio-console` | From day 1; again when things feel slow | Structured logs + live Busy/Idle per task |
+Tokio's `mpsc::channel(capacity)` provides bounded buffering. If the buffer is full, senders await permits asynchronously, propagating natural backpressure through the pipeline.
 
+### 🎥 Video Demonstration
+<video src="asset/mpsc_animation.mp4" controls width="100%"></video>
+
+> 🔗 **Direct Video Link**: [`asset/mpsc_animation.mp4`](asset/mpsc_animation.mp4)  
+> 🕹️ **Interactive Animation**: [`simulations/06_mpsc.html`](simulations/06_mpsc.html)
+
+### The Coordinator Handle Drop Rule:
+`rx.recv()` returns `Some(msg)` until **all** `Sender` handles are dropped. If the coordinating thread clones `tx` for workers but forgets to `drop(tx)` itself, `rx.recv().await` **will hang forever waiting for more messages**.
+
+```rust
+let (tx, mut rx) = mpsc::channel(32);
+
+let tx1 = tx.clone();
+tokio::spawn(async move {
+    tx1.send("task 1").await.unwrap();
+    // tx1 dropped here
+});
+
+// 🔑 CRITICAL: Drop original sender in coordinator!
+drop(tx);
+
+// Now the receiver loop cleanly terminates when workers finish!
+while let Some(msg) = rx.recv().await {
+    println!("Processed: {msg}");
+}
+```
+
+---
+
+## 📋 Tokio Cancellation Safety Matrix
+
+| Primitive | Cancel Safe? | Details |
+|---|:---:|---|
+| `tokio::select!` | ✅ Safe | Races branches; drops losers without leaking state. |
+| `TcpListener::accept()` | ✅ Safe | If dropped before ready, socket remains undisturbed in kernel listen queue. |
+| `AsyncReadExt::read()` | ✅ Safe | No bytes transferred until `Poll::Ready(Ok(n))`. |
+| `AsyncWriteExt::write_all()` | ❌ **UNSAFE** | May write partial buffer before cancellation, corrupting stream framing. |
+| `mpsc::Receiver::recv()` | ✅ Safe | Unconsumed messages remain in channel buffer for subsequent calls. |
+| `mpsc::Sender::send()` | ⚠️ Conditional | If cancelled, message is not sent; slot permit remains unconsumed. |
+| `tokio::time::sleep()` | ✅ Safe | Cancels timer wheel entry without side effects. |
+| `tokio::spawn()` | ✅ Safe | Returns `JoinHandle`; cancellation via `.abort()`. |
+
+---
+
+## 📦 Project Layout
+
+```text
+tokio/
+├── index.html                    # 🌟 Monolithic Interactive Visual Studio & Reference
+├── simulations/                  # 🎬 Organized Interactive Visual Simulations
+│   ├── 01_select.html            # Pattern 1: tokio::select! race & cancel animation
+│   ├── 02_async_io.html          # Pattern 2: Async I/O reactor & 16 sockets animation
+│   ├── 03_tracing.html           # Pattern 3: Tracing & tokio-console live dashboard
+│   ├── 04_accept.html            # Pattern 4: Resilient accept loop animation
+│   ├── 05_echo.html              # Pattern 5: TCP echo server animation
+│   └── 06_mpsc.html              # Pattern 6: Bounded MPSC channel animation
+├── asset/                        # 🎥 Video Demonstrations & High-Res Infographics
+│   ├── select_animation.mp4      # Video 1: tokio::select! animation
+│   ├── async_io_animation.mp4    # Video 2: Async I/O reactor animation
+│   ├── tracing_animation.mp4     # Video 3: Tracing & tokio-console animation
+│   ├── accept_animation.mp4      # Video 4: Resilient accept loop animation
+│   ├── echo_animation.mp4        # Video 5: TCP echo server animation
+│   ├── mpsc_animation.mp4        # Video 6: Bounded MPSC channel animation
+│   ├── tokio_architecture_map.png# High-res Tokio Architecture Infographic
+│   └── tokio_lifecycle_map.png   # High-res Task & Future Lifecycle Infographic
+├── doces/
+│   └── 🧵Learning Rust Tokio.pdf # Community documentation & reference guide
+├── src/
+│   ├── main.rs                   # 🦀 Monolithic CLI Runner (all 6 patterns)
+│   └── lib.rs                    # Reusable async modules & traits
+├── examples/
+│   ├── 01_select_timeout.rs      # Pattern 1 executable
+│   ├── 02_async_io_reactor.rs    # Pattern 2 executable
+│   ├── 03_tracing_console.rs     # Pattern 3 executable
+│   ├── 04_tcp_accept_resilient.rs# Pattern 4 executable
+│   ├── 05_echo_server.rs         # Pattern 5 executable
+│   └── 06_mpsc_backpressure.rs   # Pattern 6 executable
+├── tests/
+│   └── integration_tests.rs      # Automated test suite
+├── .github/workflows/
+│   └── ci.yml                    # Automated CI test & GitHub Pages deploy workflow
+├── Cargo.toml                    # Package manifest & dependencies
+├── LICENSE                       # Dual MIT / Apache-2.0 license
+├── CONTRIBUTING.md               # Contribution guide
+└── package.json                  # Convenience scripts for web serving
+```
+
+---
+
+## 🤝 Contributing & License
+
+Contributions, improvements, and additional visual modules are welcome! See [`CONTRIBUTING.md`](CONTRIBUTING.md) for details.
+
+Dual-licensed under either of:
+- **MIT License** ([LICENSE-MIT](LICENSE-MIT))
+- **Apache License, Version 2.0** ([LICENSE-APACHE](LICENSE-APACHE))

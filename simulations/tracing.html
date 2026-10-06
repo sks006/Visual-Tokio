@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tokio-console & Tracing — Spot the Blocked Task</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --line: #30363d;
+      --text: #e6edf3;
+      --text-muted: #7d8590;
+      --ok: #51cf66;
+      --warn: #ffd43b;
+      --bad: #ff6b6b;
+      --span: #4dabf7;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* NAVIGATION */
+    .nav-bar {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 16px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-link {
+      color: #58a6ff;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .nav-link:hover { text-decoration: underline; }
+
+    .nav-badge {
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+    }
+
+    h1 {
+      font-size: 16px;
+      color: var(--text);
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    button {
+      background: #238636;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    button:hover:not(:disabled) { background: #2ea043; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    button.btn-secondary {
+      background: #21262d;
+      border-color: var(--line);
+      color: var(--text);
+    }
+
+    #stage {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 360px;
+    }
+
+    #hdr {
+      display: grid;
+      grid-template-columns: 2.2fr 1fr 1fr 1fr 1fr 1fr;
+      gap: 8px;
+      padding: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--line);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 2.2fr 1fr 1fr 1fr 1fr 1fr;
+      gap: 8px;
+      padding: 10px 8px;
+      border-bottom: 1px solid #161b22;
+      align-items: center;
+      font-size: 12px;
+      transition: all 0.35s ease;
+    }
+
+    .row.blocked {
+      background: #2a0f0f;
+      border-left: 3px solid var(--bad);
+      box-shadow: inset 0 0 22px -8px var(--bad);
+    }
+
+    .row.stuck {
+      background: #2a1a0f;
+      border-left: 3px solid var(--warn);
+      box-shadow: inset 0 0 22px -8px var(--warn);
+    }
+
+    .name {
+      color: var(--span);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .busy { text-align: right; font-variant-numeric: tabular-nums; }
+    .busy.hot { color: var(--bad); font-weight: 700; }
+
+    .idle { text-align: right; font-variant-numeric: tabular-nums; }
+    .idle.cold { color: var(--warn); font-weight: 700; }
+
+    .polls { text-align: right; color: var(--text-muted); }
+
+    .warn { font-size: 11px; }
+    .warn.y { color: var(--bad); font-weight: 700; }
+    .warn.w { color: var(--warn); font-weight: 700; }
+    .warn.g { color: var(--ok); }
+
+    #verdict {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #010409;
+      border: 1px solid var(--line);
+      font-size: 12px;
+      min-height: 52px;
+      line-height: 1.5;
+    }
+
+    #verdict b { color: var(--bad); }
+    #verdict code { color: var(--span); }
+  </style>
+</head>
+<body>
+
+  <!-- NAVIGATION -->
+  <div class="nav-bar">
+    <a href="../index.html" class="nav-link">← Back to Tokio Runtime Studio (index.html)</a>
+    <span class="nav-badge">Module 03 · Tracing & Observability</span>
+  </div>
+
+  <!-- TITLE & CONTROLS -->
+  <h1>tokio-console — Live Task Diagnostics · Watch Busy Time</h1>
+  <div class="controls-row">
+    <button id="play">▶ Stream Tracing Telemetry</button>
+    <button class="btn-secondary" onclick="location.reload()">🔄 Reset</button>
+  </div>
+
+  <!-- STAGE -->
+  <div id="stage">
+    <div id="hdr">
+      <div>task span</div>
+      <div style="text-align:right">busy</div>
+      <div style="text-align:right">idle</div>
+      <div style="text-align:right">polls</div>
+      <div style="text-align:right">state</div>
+      <div>diagnostics</div>
+    </div>
+    <div id="rows"></div>
+    <div id="verdict">// Waiting for events…</div>
+  </div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const rows = $('#rows'), verdict = $('#verdict');
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+
+    const tasks = [
+      { name: 'connection{id=1 peer=1.2.3.4:55112}', busy: 0, idle: 0, polls: 0, state: 'Idle', cls: '' },
+      { name: 'connection{id=2 peer=1.2.3.4:55231}', busy: 0, idle: 0, polls: 0, state: 'Idle', cls: '' },
+      { name: 'connection{id=3 peer=10.0.0.9:41002}', busy: 0, idle: 0, polls: 0, state: 'Idle', cls: '' },
+      { name: 'background_flush',                    busy: 0, idle: 0, polls: 0, state: 'Idle', cls: '' },
+    ];
+
+    function fmt(us) {
+      if (us < 1000) return us + 'μs';
+      if (us < 1_000_000) return (us / 1000).toFixed(1) + 'ms';
+      return (us / 1_000_000).toFixed(2) + 's';
+    }
+
+    function render() {
+      rows.innerHTML = '';
+      for (const t of tasks) {
+        const r = document.createElement('div');
+        r.className = 'row ' + t.cls;
+        const hot = t.busy > 200_000;
+        const cold = (t.state === 'Idle' && t.idle > 40_000_000);
+        r.innerHTML = `
+          <div class="name">${t.name}</div>
+          <div class="busy ${hot ? 'hot' : ''}">${fmt(t.busy)}</div>
+          <div class="idle ${cold ? 'cold' : ''}">${fmt(t.idle)}</div>
+          <div class="polls">${t.polls}</div>
+          <div class="polls">${t.state}</div>
+          <div class="warn ${hot ? 'y' : cold ? 'w' : 'g'}">${hot ? '🔥 STALL' : cold ? '⚠ STUCK' : t.polls ? '✓ OK' : '—'}</div>
+        `;
+        rows.appendChild(r);
+      }
+    }
+
+    async function run() {
+      $('#play').disabled = true;
+      for (const t of tasks) { t.busy = 0; t.idle = 0; t.polls = 0; t.state = 'Idle'; t.cls = ''; }
+      render();
+      verdict.textContent = '// Streaming telemetry spans…';
+
+      // Phase 1 — normal cooperative tasks
+      for (let round = 0; round < 3; round++) {
+        for (const t of [tasks[0], tasks[2]]) {
+          t.state = 'Running'; render(); await wait(120);
+          t.busy += 300; t.polls += 1;
+          t.state = 'Idle';    render(); await wait(180);
+          t.idle += 1_200_000 + Math.random() * 800_000;
+          render(); await wait(100);
+        }
+      }
+
+      // Phase 2 — task 2 starts blocking with sync operation
+      tasks[1].state = 'Running';
+      render();
+      await wait(180);
+      for (let i = 0; i < 6; i++) {
+        tasks[1].busy += 220_000;
+        tasks[1].polls += 1;
+        render();
+        await wait(220);
+      }
+      tasks[1].cls = 'blocked';
+      tasks[1].state = 'Idle';
+      render();
+      verdict.innerHTML = '🔥 <b>connection{id=2}</b> poll took <b>1.32s</b>! Worker thread stalled.<br>→ Fix: Move synchronous operations into <code>tokio::task::spawn_blocking</code>.';
+      await wait(1200);
+
+      // Phase 3 — background_flush stuck
+      tasks[3].idle += 60_000_000;
+      tasks[3].cls = 'stuck';
+      render();
+      verdict.innerHTML += '<br>⚠ <b>background_flush</b> has had <b>no poll in 60s</b>. Possible lost waker or deadlock.';
+      await wait(500);
+
+      $('#play').disabled = false;
+    }
+
+    $('#play').addEventListener('click', run);
+    render();
+  </script>
+</body>
+</html>

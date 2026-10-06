@@ -1,0 +1,44 @@
+[package]
+name = "tokio-visual-guide"
+version = "0.1.0"
+edition = "2021"
+authors = ["Tokio Visual Guide Contributors"]
+description = "Production-grade asynchronous Rust reference and interactive visual guide for Tokio"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sks006/tokio"
+keywords = ["tokio", "async", "reactor", "tracing", "visualizer"]
+categories = ["asynchronous", "concurrency", "development-tools"]
+
+[dependencies]
+tokio = { version = "1.43", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+futures = "0.3"
+
+[[bin]]
+name = "tokio-visual-guide"
+path = "src/main.rs"
+
+[[example]]
+name = "01_select_timeout"
+path = "examples/01_select_timeout.rs"
+
+[[example]]
+name = "02_async_io_reactor"
+path = "examples/02_async_io_reactor.rs"
+
+[[example]]
+name = "03_tracing_console"
+path = "examples/03_tracing_console.rs"
+
+[[example]]
+name = "04_tcp_accept_resilient"
+path = "examples/04_tcp_accept_resilient.rs"
+
+[[example]]
+name = "05_echo_server"
+path = "examples/05_echo_server.rs"
+
+[[example]]
+name = "06_mpsc_backpressure"
+path = "examples/06_mpsc_backpressure.rs"

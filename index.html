@@ -1,0 +1,1595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tokio Runtime Studio — Interactive Visual Architecture & Production Guide</title>
+  <meta name="description" content="A monolithic interactive visual simulator and production-grade guide for the Tokio asynchronous Rust runtime: select!, epoll reactor, tracing, resilient accept loops, echo pipelines, and MPSC channels.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #07090e;
+      --bg-surface: #0e121b;
+      --bg-card: #141b27;
+      --bg-elevated: #1b2434;
+      --border: #233047;
+      --border-bright: #334566;
+      --text: #e2e8f0;
+      --text-muted: #8b9bb4;
+      --text-dim: #54657e;
+      --accent-rust: #f97316;
+      --accent-tokio: #38bdf8;
+      --accent-green: #22c55e;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --accent-purple: #a855f7;
+      --glow-tokio: rgba(56, 189, 248, 0.25);
+      --glow-rust: rgba(249, 115, 22, 0.25);
+      --glow-green: rgba(34, 197, 94, 0.25);
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* TOP HEADER */
+    header {
+      background: rgba(14, 18, 27, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 0.75rem 1.5rem;
+    }
+    .header-inner {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: inherit;
+    }
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #f97316, #ea580c);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      box-shadow: 0 0 15px var(--glow-rust);
+    }
+    .brand-text h1 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .brand-badge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-tokio);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 999px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .brand-text p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* STATUS TICKER */
+    .runtime-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.75rem;
+      border-radius: 8px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* NAVIGATION TABS */
+    .nav-tabs {
+      display: flex;
+      gap: 0.35rem;
+      background: var(--bg-surface);
+      padding: 0.25rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .nav-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-size: 0.82rem;
+      font-weight: 500;
+      padding: 0.45rem 0.85rem;
+      border-radius: 7px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
+    }
+    .nav-btn:hover {
+      color: var(--text);
+      background: var(--bg-card);
+    }
+    .nav-btn.active {
+      color: #fff;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-bright);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    /* MAIN CONTAINER */
+    main {
+      flex: 1;
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    /* MODULE SELECTOR STRIP */
+    .module-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+    }
+    .module-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.85rem 1rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .module-card:hover {
+      border-color: var(--border-bright);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    .module-card.active {
+      background: var(--bg-elevated);
+      border-color: var(--accent-tokio);
+      box-shadow: 0 0 20px var(--glow-tokio);
+    }
+    .module-card.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--accent-tokio);
+    }
+    .module-tag {
+      font-size: 0.7rem;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+      margin-bottom: 0.2rem;
+    }
+    .module-card.active .module-tag {
+      color: var(--accent-tokio);
+      font-weight: 600;
+    }
+    .module-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* STUDIO WORKSPACE GRID */
+    .studio-grid {
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 1.25rem;
+    }
+    @media (max-width: 1100px) {
+      .studio-grid { grid-template-columns: 1fr; }
+    }
+
+    /* SIMULATION STAGE PANEL */
+    .stage-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+
+    .panel-header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.85rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    .panel-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .btn {
+      background: var(--bg-elevated);
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-family: var(--font-sans);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.45rem 0.9rem;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s;
+    }
+    .btn:hover:not(:disabled) {
+      background: var(--border-bright);
+      border-color: var(--text-muted);
+    }
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .btn-primary {
+      background: #16a34a;
+      border-color: #22c55e;
+      color: #fff;
+      box-shadow: 0 0 12px var(--glow-green);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: #15803d;
+      border-color: #4ade80;
+    }
+    .speed-select {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      padding: 0.4rem 0.6rem;
+      border-radius: 8px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* SCENARIO TOGGLES BAR */
+    .scenario-bar {
+      background: rgba(14, 18, 27, 0.5);
+      border-bottom: 1px solid var(--border);
+      padding: 0.6rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      font-size: 0.8rem;
+      flex-wrap: wrap;
+    }
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      cursor: pointer;
+      user-select: none;
+      color: var(--text-muted);
+      transition: color 0.2s;
+    }
+    .toggle-label:hover { color: var(--text); }
+    .toggle-label input { accent-color: var(--accent-tokio); }
+
+    /* SIMULATION CANVAS / STAGE */
+    .stage-canvas {
+      padding: 1.5rem;
+      min-height: 440px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 30%, #111827 0%, #07090e 100%);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* MODULE 1: SELECT RACE */
+    .race-lane {
+      background: rgba(14, 18, 27, 0.7);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    .race-lane.winner {
+      border-color: var(--accent-green);
+      background: rgba(34, 197, 94, 0.1);
+      box-shadow: 0 0 25px var(--glow-green);
+    }
+    .race-lane.loser {
+      border-color: var(--accent-red);
+      opacity: 0.45;
+      background: rgba(239, 68, 68, 0.08);
+    }
+    .lane-label {
+      width: 170px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .lane-progress {
+      flex: 1;
+      height: 24px;
+      background: var(--bg-surface);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      position: relative;
+    }
+    .lane-bar {
+      height: 100%;
+      width: 0%;
+      transition: width 0.05s linear;
+      border-radius: 7px;
+    }
+    .bar-db { background: linear-gradient(90deg, #0284c7, #38bdf8); }
+    .bar-timer { background: linear-gradient(90deg, #d97706, #fbbf24); }
+    .lane-status {
+      width: 140px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      text-align: right;
+      color: var(--text-dim);
+    }
+
+    /* MODULE 2: REACTOR 16 SOCKETS */
+    .reactor-box {
+      border: 2px solid var(--accent-tokio);
+      background: rgba(56, 189, 248, 0.08);
+      border-radius: 14px;
+      padding: 1rem 1.5rem;
+      margin: 0 auto 1.5rem;
+      text-align: center;
+      width: 320px;
+      box-shadow: 0 0 20px var(--glow-tokio);
+      transition: all 0.3s;
+    }
+    .reactor-box.pulse {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: var(--accent-amber);
+      box-shadow: 0 0 30px rgba(245, 158, 11, 0.4);
+      transform: scale(1.03);
+    }
+    .sockets-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 0.6rem;
+    }
+    @media (max-width: 600px) {
+      .sockets-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    .sock-card {
+      background: var(--bg-surface);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 0.6rem 0.4rem;
+      text-align: center;
+      font-size: 0.7rem;
+      font-family: var(--font-mono);
+      transition: all 0.3s;
+    }
+    .sock-card.parked {
+      border-color: var(--border-bright);
+      opacity: 0.55;
+    }
+    .sock-card.active {
+      border-color: var(--accent-green);
+      background: rgba(34, 197, 94, 0.15);
+      box-shadow: 0 0 16px var(--glow-green);
+      transform: scale(1.08);
+    }
+
+    /* MODULE 3: TRACING DASHBOARD */
+    .tracing-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+    }
+    .tracing-table th {
+      text-align: left;
+      padding: 0.6rem 0.75rem;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      font-size: 0.68rem;
+      letter-spacing: 0.05em;
+    }
+    .tracing-table td {
+      padding: 0.7rem 0.75rem;
+      border-bottom: 1px solid rgba(35, 48, 71, 0.5);
+    }
+    .tracing-row.hot {
+      background: rgba(239, 68, 68, 0.15);
+      border-left: 3px solid var(--accent-red);
+    }
+    .tracing-row.cold {
+      background: rgba(245, 158, 11, 0.1);
+      border-left: 3px solid var(--accent-amber);
+    }
+
+    /* MODULE 4 & 5 & 6: FLEX DIAGRAM VISUALS */
+    .arch-flow-flex {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .node-box {
+      background: var(--bg-surface);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      min-width: 180px;
+      transition: all 0.3s;
+    }
+    .node-box.active {
+      border-color: var(--accent-tokio);
+      box-shadow: 0 0 20px var(--glow-tokio);
+      transform: translateY(-2px);
+    }
+    .node-box.dead {
+      border-color: var(--accent-red);
+      opacity: 0.5;
+    }
+
+    /* FLYING PARTICLES */
+    .packet-dot {
+      position: absolute;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: #000;
+      z-index: 50;
+      pointer-events: none;
+      transition: transform 0.75s cubic-bezier(0.34, 1.3, 0.64, 1), opacity 0.2s;
+    }
+
+    /* TELEMETRY LOG */
+    .telemetry-log {
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      height: 160px;
+      overflow-y: auto;
+      padding: 0.75rem 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+    }
+    .log-line {
+      display: flex;
+      align-items: baseline;
+      gap: 0.6rem;
+      padding: 0.15rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .log-time { color: var(--text-dim); }
+    .log-badge {
+      font-size: 0.65rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .badge-info { background: rgba(56, 189, 248, 0.2); color: var(--accent-tokio); }
+    .badge-ok { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
+    .badge-warn { background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); }
+    .badge-err { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+    .badge-waker { background: rgba(168, 85, 247, 0.2); color: var(--accent-purple); }
+
+    /* CODE SYNC PANEL */
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .code-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    .code-header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.65rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .code-header span {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .code-body {
+      background: #090d14;
+      padding: 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      line-height: 1.6;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .code-line {
+      display: block;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+    .code-line.active {
+      background: rgba(56, 189, 248, 0.2);
+      border-left: 3px solid var(--accent-tokio);
+      color: #fff;
+      font-weight: 600;
+    }
+    .kw { color: #f43f5e; }
+    .fn { color: #a855f7; }
+    .type { color: #38bdf8; }
+    .str { color: #4ade80; }
+    .comment { color: #64748b; font-style: italic; }
+
+    /* RUNNER / EXPLANATION CARD */
+    .runner-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem;
+    }
+    .cli-box {
+      background: #090d14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--accent-tokio);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+    }
+
+    /* MAPS SECTION */
+    .maps-section, .cheat-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+    }
+    .section-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .section-desc {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 1.25rem;
+    }
+    .maps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 1.25rem;
+    }
+    @media (max-width: 600px) {
+      .maps-grid { grid-template-columns: 1fr; }
+    }
+    .map-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.25s;
+    }
+    .map-card:hover {
+      border-color: var(--accent-tokio);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    }
+    .map-img-preview {
+      width: 100%;
+      height: 220px;
+      object-fit: cover;
+      display: block;
+      border-bottom: 1px solid var(--border);
+    }
+    .map-info {
+      padding: 1rem;
+    }
+    .map-info h3 {
+      font-size: 0.95rem;
+      margin-bottom: 0.35rem;
+    }
+    .map-info p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    /* CHEAT SHEET TABLE */
+    .search-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.85rem;
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+      width: 100%;
+      max-width: 380px;
+      margin-bottom: 1rem;
+      outline: none;
+    }
+    .search-box:focus { border-color: var(--accent-tokio); }
+    .api-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    .api-table th {
+      text-align: left;
+      padding: 0.75rem;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .api-table td {
+      padding: 0.75rem;
+      border-bottom: 1px solid rgba(35, 48, 71, 0.4);
+      vertical-align: top;
+    }
+    .api-name { font-family: var(--font-mono); font-weight: 600; color: var(--accent-tokio); }
+    .cancel-safe {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+    .safe-yes { background: rgba(34, 197, 94, 0.15); color: var(--accent-green); }
+    .safe-no { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+    .safe-cond { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+
+    /* LIGHTBOX MODAL */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.92);
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .lightbox.open { display: flex; }
+    .lightbox-content {
+      position: relative;
+      max-width: 95vw;
+      max-height: 95vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .lightbox-img {
+      max-width: 100%;
+      max-height: 85vh;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      box-shadow: 0 0 50px rgba(0,0,0,0.8);
+    }
+    .lightbox-close {
+      position: absolute;
+      top: -40px;
+      right: 0;
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-size: 2rem;
+      cursor: pointer;
+    }
+
+    /* FOOTER */
+    footer {
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      padding: 1.5rem;
+      margin-top: auto;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+    footer a { color: var(--accent-tokio); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-inner">
+      <a href="#" class="brand">
+        <div class="brand-icon">🦀</div>
+        <div class="brand-text">
+          <h1>TOKIO RUNTIME STUDIO <span class="brand-badge">v1.43 / Production</span></h1>
+          <p>Interactive Asynchronous Architecture & Verification Suite</p>
+        </div>
+      </a>
+
+      <div class="runtime-badge">
+        <div class="status-dot"></div>
+        <span>REACTOR: epoll / MIO online</span>
+      </div>
+
+      <nav class="nav-tabs">
+        <button class="nav-btn active" onclick="switchMainTab('studio')">🕹️ Visual Studio</button>
+        <button class="nav-btn" onclick="switchMainTab('maps')">🗺️ Architecture Maps</button>
+        <button class="nav-btn" onclick="switchMainTab('api')">📖 API Reference</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- SECTION: STUDIO -->
+    <div id="section-studio">
+      <!-- MODULE SELECTOR STRIP -->
+      <div class="module-strip">
+        <div class="module-card active" onclick="loadModule(1)" id="mod-tab-1">
+          <div class="module-tag">01 · CONTROL FLOW</div>
+          <div class="module-title">tokio::select! & Cancel</div>
+        </div>
+        <div class="module-card" onclick="loadModule(2)" id="mod-tab-2">
+          <div class="module-tag">02 · REACTOR / EPOLL</div>
+          <div class="module-title">Async I/O Multiplexing</div>
+        </div>
+        <div class="module-card" onclick="loadModule(3)" id="mod-tab-3">
+          <div class="module-tag">03 · OBSERVABILITY</div>
+          <div class="module-title">Tracing & tokio-console</div>
+        </div>
+        <div class="module-card" onclick="loadModule(4)" id="mod-tab-4">
+          <div class="module-tag">04 · NETWORK RESILIENCE</div>
+          <div class="module-title">Resilient Accept Loop</div>
+        </div>
+        <div class="module-card" onclick="loadModule(5)" id="mod-tab-5">
+          <div class="module-tag">05 · STREAM PIPELINES</div>
+          <div class="module-title">TCP Echo & Splitting</div>
+        </div>
+        <div class="module-card" onclick="loadModule(6)" id="mod-tab-6">
+          <div class="module-tag">06 · CHANNELS</div>
+          <div class="module-title">MPSC & Backpressure</div>
+        </div>
+      </div>
+
+      <!-- MAIN WORKSPACE -->
+      <div class="studio-grid" style="margin-top: 1.25rem;">
+        
+        <!-- LEFT: SIMULATION STAGE -->
+        <div class="stage-panel">
+          <div class="panel-header">
+            <div class="panel-title" id="stage-title">
+              <span>🔀</span> tokio::select! — Race & Cancellation by Drop
+            </div>
+            <div class="panel-controls">
+              <button class="btn btn-primary" id="btn-play" onclick="simPlay()">▶ Run</button>
+              <button class="btn" id="btn-pause" onclick="simPause()" disabled>⏸ Pause</button>
+              <button class="btn" id="btn-step" onclick="simStep()">⏭ Step</button>
+              <button class="btn" id="btn-reset" onclick="simReset()">🔄 Reset</button>
+              <select class="speed-select" id="sim-speed" onchange="setSpeed(this.value)">
+                <option value="0.5">0.5x</option>
+                <option value="1" selected>1.0x</option>
+                <option value="2">2.0x</option>
+                <option value="4">4.0x</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- SCENARIO OPTIONS -->
+          <div class="scenario-bar" id="scenario-controls">
+            <!-- Populated dynamically -->
+          </div>
+
+          <!-- STAGE CANVAS -->
+          <div class="stage-canvas" id="stage-canvas">
+            <!-- Simulation UI injected here -->
+          </div>
+
+          <!-- TELEMETRY CONSOLE -->
+          <div class="telemetry-log" id="telemetry-log">
+            <!-- Logs output here -->
+          </div>
+        </div>
+
+        <!-- RIGHT: CODE SYNC & RUNNER -->
+        <div class="side-panel">
+          
+          <div class="code-card">
+            <div class="code-header">
+              <span id="code-file-name">select_race.rs</span>
+              <span>SYNCHRONIZED STEP</span>
+            </div>
+            <div class="code-body" id="code-body">
+              <!-- Code lines injected here -->
+            </div>
+          </div>
+
+          <div class="runner-card">
+            <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem;">
+              🦀 Run in Production Terminal
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">
+              Execute the companion Rust pattern from the monolithic binary:
+            </div>
+            <div class="cli-box" id="cli-hint">
+              <code>cargo run -- 1</code>
+              <button class="btn" style="padding: 0.2rem 0.5rem; font-size: 0.7rem;" onclick="copyCli()">Copy</button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- SECTION: MAPS -->
+    <div id="section-maps" class="maps-section" style="display: none;">
+      <h2 class="section-title">🗺️ Tokio High-Resolution Architecture Maps</h2>
+      <p class="section-desc">Click any map to inspect in full-resolution zoom lightbox.</p>
+      
+      <div class="maps-grid">
+        <div class="map-card" onclick="openLightbox('asset/tokio_architecture_map.png', 'The Complete Map of Tokio Architecture')">
+          <img src="asset/tokio_architecture_map.png" alt="The Complete Map of Tokio" class="map-img-preview">
+          <div class="map-info">
+            <h3>The Complete Map of Tokio</h3>
+            <p>High-resolution overview of Runtime, Reactor, Tasks, Schedulers, and I/O driver.</p>
+          </div>
+        </div>
+
+        <div class="map-card" onclick="openLightbox('asset/tokio_lifecycle_map.png', 'Tokio Task & Future Lifecycle')">
+          <img src="asset/tokio_lifecycle_map.png" alt="Tokio Task Lifecycle" class="map-img-preview">
+          <div class="map-info">
+            <h3>Tokio Task Lifecycle & Reactor Loop</h3>
+            <p>From creation to Poll::Pending, Waker registration, epoll_wait unpark, and completion.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION: API REFERENCE -->
+    <div id="section-api" class="cheat-section" style="display: none;">
+      <h2 class="section-title">📖 Tokio API Reference & Cancellation Safety</h2>
+      <p class="section-desc">Searchable directory of Tokio primitives and cancel-safety properties in <code>select!</code> branches.</p>
+      
+      <input type="text" class="search-box" id="api-search" placeholder="Filter APIs (e.g. select, accept, read, mpsc)..." oninput="filterApis(this.value)">
+
+      <table class="api-table" id="api-table">
+        <thead>
+          <tr>
+            <th>API / Primitive</th>
+            <th>Module</th>
+            <th>Cancel Safe?</th>
+            <th>Summary & Production Usage</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="api-name">tokio::select!</td>
+            <td>tokio</td>
+            <td><span class="cancel-safe safe-yes">Safe</span></td>
+            <td>Races multiple futures concurrently; resolves the winner and immediately drops the losers.</td>
+          </tr>
+          <tr>
+            <td class="api-name">TcpListener::accept()</td>
+            <td>tokio::net</td>
+            <td><span class="cancel-safe safe-yes">Safe</span></td>
+            <td>Awaits the next connection. If dropped before ready, socket remains undisturbed in kernel listen backlog.</td>
+          </tr>
+          <tr>
+            <td class="api-name">AsyncReadExt::read()</td>
+            <td>tokio::io</td>
+            <td><span class="cancel-safe safe-yes">Safe</span></td>
+            <td>Reads incoming bytes. If cancelled before completion, no bytes were yet transferred out of the buffer.</td>
+          </tr>
+          <tr>
+            <td class="api-name">AsyncWriteExt::write_all()</td>
+            <td>tokio::io</td>
+            <td><span class="cancel-safe safe-no">UNSAFE</span></td>
+            <td>Transfers entire buffer. If dropped mid-way, partial bytes may already be written, leaving connection corrupt.</td>
+          </tr>
+          <tr>
+            <td class="api-name">mpsc::Receiver::recv()</td>
+            <td>tokio::sync</td>
+            <td><span class="cancel-safe safe-yes">Safe</span></td>
+            <td>Awaits next channel item. If dropped before message arrives, message remains queued for subsequent recv.</td>
+          </tr>
+          <tr>
+            <td class="api-name">tokio::time::sleep()</td>
+            <td>tokio::time</td>
+            <td><span class="cancel-safe safe-yes">Safe</span></td>
+            <td>Async timer. Dropping Sleep cancels timer entry in runtime timing wheel without side-effects.</td>
+          </tr>
+          <tr>
+            <td class="api-name">tokio::spawn()</td>
+            <td>tokio::task</td>
+            <td><span class="cancel-safe safe-yes">Safe</span></td>
+            <td>Spawns standalone async task onto Tokio worker threadpool. Yields JoinHandle with .abort() capability.</td>
+          </tr>
+          <tr>
+            <td class="api-name">tokio::task::spawn_blocking()</td>
+            <td>tokio::task</td>
+            <td><span class="cancel-safe safe-cond">Conditional</span></td>
+            <td>Offloads synchronous heavy CPU or blocking I/O onto a dedicated blocking threadpool. Prevents reactor stalls.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </main>
+
+  <!-- LIGHTBOX MODAL -->
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <div class="lightbox-content" onclick="event.stopPropagation()">
+      <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+      <img src="" alt="" class="lightbox-img" id="lightbox-img">
+      <div style="color: #fff; margin-top: 1rem; font-weight: 600;" id="lightbox-caption"></div>
+    </div>
+  </div>
+
+  <footer>
+    <p>🦀 <strong>Tokio Runtime Studio</strong> · Dual-licensed under MIT or Apache-2.0 · Designed for Production Systems</p>
+    <p style="margin-top: 0.35rem;">Standalone Visualizers: 
+      <a href="simulations/01_select.html">01_select.html</a> · 
+      <a href="simulations/02_async_io.html">02_async_io.html</a> · 
+      <a href="simulations/03_tracing.html">03_tracing.html</a> · 
+      <a href="simulations/04_accept.html">04_accept.html</a> · 
+      <a href="simulations/05_echo.html">05_echo.html</a> · 
+      <a href="simulations/06_mpsc.html">06_mpsc.html</a>
+    </p>
+  </footer>
+
+  <!-- MONOLITHIC JAVASCRIPT SIMULATION LOGIC -->
+  <script>
+    // Universal App State
+    let currentModule = 1;
+    let isRunning = false;
+    let isPaused = false;
+    let speedMultiplier = 1;
+    let currentStepIndex = 0;
+    let simTimer = null;
+
+    // Helper utilities
+    const $ = id => document.getElementById(id);
+    const wait = ms => new Promise(res => {
+      simTimer = setTimeout(res, ms / speedMultiplier);
+    });
+
+    function setSpeed(v) { speedMultiplier = parseFloat(v); }
+
+    function log(msg, type='info') {
+      const el = $('telemetry-log');
+      const time = new Date().toISOString().substring(11, 23);
+      const row = document.createElement('div');
+      row.className = 'log-line';
+      row.innerHTML = `<span class="log-time">${time}</span>
+                       <span class="log-badge badge-${type}">${type.toUpperCase()}</span>
+                       <span>${msg}</span>`;
+      el.appendChild(row);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function highlightCodeLine(lineNum) {
+      document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+      const target = document.getElementById(`code-L${lineNum}`);
+      if (target) {
+        target.classList.add('active');
+        target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+
+    function switchMainTab(tabId) {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      $('section-studio').style.display = tabId === 'studio' ? 'block' : 'none';
+      $('section-maps').style.display = tabId === 'maps' ? 'block' : 'none';
+      $('section-api').style.display = tabId === 'api' ? 'block' : 'none';
+      event.currentTarget.classList.add('active');
+    }
+
+    function openLightbox(src, caption) {
+      $('lightbox-img').src = src;
+      $('lightbox-caption').textContent = caption;
+      $('lightbox').classList.add('open');
+    }
+    function closeLightbox() { $('lightbox').classList.remove('open'); }
+
+    function filterApis(query) {
+      const q = query.toLowerCase();
+      document.querySelectorAll('#api-table tbody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    }
+
+    function copyCli() {
+      const text = $('cli-hint').querySelector('code').textContent;
+      navigator.clipboard.writeText(text);
+      alert('Copied to clipboard: ' + text);
+    }
+
+    // =========================================================================
+    // MODULE DEFINITIONS & CODE
+    // =========================================================================
+    const MODULE_DATA = {
+      1: {
+        title: "🔀 tokio::select! — Race & Cancellation by Drop",
+        file: "01_select_timeout.rs",
+        cli: "cargo run -- 1",
+        scenarios: `
+          <label class="toggle-label"><input type="checkbox" id="m1-dbFast" checked> Database responds fast (1.5s vs 4.0s timeout)</label>
+        `,
+        code: [
+          { l: 1, text: `<span class="comment">// 01_select_timeout.rs</span>` },
+          { l: 2, text: `<span class="kw">tokio::select!</span> {` },
+          { l: 3, text: `    res = <span class="fn">db_query</span>().<span class="kw">await</span> => {` },
+          { l: 4, text: `        <span class="fn">println!</span>(<span class="str">"Result: {:?}"</span>, res);` },
+          { l: 5, text: `    }` },
+          { l: 6, text: `    _ = tokio::time::<span class="fn">sleep</span>(Duration::from_secs(4)).<span class="kw">await</span> => {` },
+          { l: 7, text: `        <span class="fn">println!</span>(<span class="str">"Timeout deadline fired!"</span>);` },
+          { l: 8, text: `    }` },
+          { l: 9, text: `}` },
+          { l: 10, text: `<span class="comment">// Loser future is dropped immediately; resources released.</span>` }
+        ]
+      },
+      2: {
+        title: "⚡ Asynchronous I/O Reactor — 1 Thread, 16 Sockets",
+        file: "02_async_io_reactor.rs",
+        cli: "cargo run -- 2",
+        scenarios: `
+          <span style="color: var(--text-muted);">OS Reactor Engine: <strong>epoll (Linux) / kqueue (macOS)</strong></span>
+        `,
+        code: [
+          { l: 1, text: `<span class="comment">// 02_async_io_reactor.rs</span>` },
+          { l: 2, text: `<span class="kw">let</span> listener = <span class="type">TcpListener</span>::<span class="fn">bind</span>(<span class="str">"127.0.0.1:8080"</span>).<span class="kw">await</span>?;` },
+          { l: 3, text: `<span class="kw">loop</span> {` },
+          { l: 4, text: `    <span class="kw">let</span> (socket, _) = listener.<span class="fn">accept</span>().<span class="kw">await</span>?;` },
+          { l: 5, text: `    tokio::<span class="fn">spawn</span>(<span class="kw">async move</span> {` },
+          { l: 6, text: `        socket.<span class="fn">read</span>(&<span class="kw">mut</span> buf).<span class="kw">await</span>?; <span class="comment">// Yields on WouldBlock</span>` },
+          { l: 7, text: `        socket.<span class="fn">write_all</span>(&buf).<span class="kw">await</span>?;` },
+          { l: 8, text: `    });` },
+          { l: 9, text: `}` }
+        ]
+      },
+      3: {
+        title: "🔍 Tracing & tokio-console — Task Stall Inspector",
+        file: "03_tracing_console.rs",
+        cli: "cargo run -- 3",
+        scenarios: `
+          <label class="toggle-label"><input type="checkbox" id="m3-injectStall" checked> Inject blocking sync sleep in Task 2</label>
+        `,
+        code: [
+          { l: 1, text: `<span class="comment">// 03_tracing_console.rs</span>` },
+          { l: 2, text: `<span class="kw">let</span> span = <span class="fn">info_span!</span>(<span class="str">"task"</span>, peer = %addr);` },
+          { l: 3, text: `<span class="comment">// RULE: Never call std::thread::sleep in async!</span>` },
+          { l: 4, text: `tokio::task::<span class="fn">spawn_blocking</span>(|| {` },
+          { l: 5, text: `    heavy_compute(); <span class="comment">// Dedicated threadpool</span>` },
+          { l: 6, text: `}).<span class="kw">await</span>?;` }
+        ]
+      },
+      4: {
+        title: "🛡️ Resilient TcpListener Accept Loop",
+        file: "04_tcp_accept_resilient.rs",
+        cli: "cargo run -- 4",
+        scenarios: `
+          <label class="toggle-label"><input type="checkbox" id="m4-simErr" checked> Simulate transient ECONNABORTED error</label>
+        `,
+        code: [
+          { l: 1, text: `<span class="comment">// 04_tcp_accept_resilient.rs</span>` },
+          { l: 2, text: `<span class="kw">match</span> listener.<span class="fn">accept</span>().<span class="kw">await</span> {` },
+          { l: 3, text: `    <span class="fn">Ok</span>((socket, addr)) => tokio::<span class="fn">spawn</span>(handler(socket)),` },
+          { l: 4, text: `    <span class="fn">Err</span>(err) <span class="kw">if</span> is_transient(&err) => {` },
+          { l: 5, text: `        tokio::time::<span class="fn">sleep</span>(Duration::from_millis(10)).<span class="kw">await</span>;` },
+          { l: 6, text: `        <span class="kw">continue</span>; <span class="comment">// SURVIVES TRANSIENT ABORTS!</span>` },
+          { l: 7, text: `    }` },
+          { l: 8, text: `    <span class="fn">Err</span>(fatal) => <span class="kw">break</span>,` },
+          { l: 9, text: `}` }
+        ]
+      },
+      5: {
+        title: "🔁 High-Performance TCP Echo Pipeline",
+        file: "05_echo_server.rs",
+        cli: "cargo run -- 5",
+        scenarios: `
+          <span style="color: var(--text-muted);">Zero-copy stream splitting: <strong>TcpStream::split()</strong></span>
+        `,
+        code: [
+          { l: 1, text: `<span class="comment">// 05_echo_server.rs</span>` },
+          { l: 2, text: `<span class="kw">let</span> (mut reader, mut writer) = stream.<span class="fn">split</span>();` },
+          { l: 3, text: `tokio::io::<span class="fn">copy</span>(&<span class="kw">mut</span> reader, &<span class="kw">mut</span> writer).<span class="kw">await</span>?;` }
+        ]
+      },
+      6: {
+        title: "📬 Bounded MPSC Channels & Permit Accounting",
+        file: "06_mpsc_backpressure.rs",
+        cli: "cargo run -- 6",
+        scenarios: `
+          <span style="color: var(--text-muted);">Bounded Channel: <strong>tokio::sync::mpsc::channel(3)</strong></span>
+        `,
+        code: [
+          { l: 1, text: `<span class="comment">// 06_mpsc_backpressure.rs</span>` },
+          { l: 2, text: `<span class="kw">let</span> (tx, <span class="kw">mut</span> rx) = mpsc::<span class="fn">channel</span>(3);` },
+          { l: 3, text: `tx.<span class="fn">send</span>(msg).<span class="kw">await</span>?; <span class="comment">// Yields if 0 permits</span>` },
+          { l: 4, text: `<span class="fn">drop</span>(tx); <span class="comment">// CRITICAL: close coordinator tx</span>` },
+          { l: 5, text: `<span class="kw">while let</span> <span class="fn">Some</span>(val) = rx.<span class="fn">recv</span>().<span class="kw">await</span> { ... }` }
+        ]
+      }
+    };
+
+    function loadModule(id) {
+      if (simTimer) clearTimeout(simTimer);
+      isRunning = false;
+      isPaused = false;
+      currentModule = id;
+
+      document.querySelectorAll('.module-card').forEach((c, idx) => {
+        c.classList.toggle('active', (idx + 1) === id);
+      });
+
+      const m = MODULE_DATA[id];
+      $('stage-title').innerHTML = m.title;
+      $('code-file-name').textContent = m.file;
+      $('cli-hint').querySelector('code').textContent = m.cli;
+      $('scenario-controls').innerHTML = m.scenarios;
+
+      // Render Code block
+      const codeHtml = m.code.map(c => 
+        `<div class="code-line" id="code-L${c.l}"><span style="color: var(--text-dim); margin-right: 0.75rem;">${c.l}</span>${c.text}</div>`
+      ).join('');
+      $('code-body').innerHTML = codeHtml;
+
+      $('telemetry-log').innerHTML = '';
+      log(`Switched to Module 0${id}: ${m.title}`);
+
+      $('btn-play').disabled = false;
+      $('btn-pause').disabled = true;
+
+      renderStageCanvas(id);
+    }
+
+    function renderStageCanvas(id) {
+      const stage = $('stage-canvas');
+      if (id === 1) {
+        stage.innerHTML = `
+          <div class="race-lane" id="lane-db">
+            <div class="lane-label">🔵 db.query()</div>
+            <div class="lane-progress"><div class="lane-bar bar-db" id="bar-db"></div></div>
+            <div class="lane-status" id="st-db">Pending 🛑</div>
+          </div>
+          <div class="race-lane" id="lane-timer">
+            <div class="lane-label">🟡 sleep(4s)</div>
+            <div class="lane-progress"><div class="lane-bar bar-timer" id="bar-timer"></div></div>
+            <div class="lane-status" id="st-timer">Pending 🛑</div>
+          </div>
+        `;
+      } else if (id === 2) {
+        let sockHtml = '';
+        for (let i = 1; i <= 16; i++) {
+          sockHtml += `<div class="sock-card" id="sock-${i}">🔌 #${i}<br><span class="st">idle</span></div>`;
+        }
+        stage.innerHTML = `
+          <div class="reactor-box" id="reactor-core">
+            <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent-tokio);">🧵 WORKER THREAD</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">Reactor: epoll_wait() multiplexing</div>
+          </div>
+          <div class="sockets-grid">${sockHtml}</div>
+        `;
+      } else if (id === 3) {
+        stage.innerHTML = `
+          <table class="tracing-table">
+            <thead>
+              <tr>
+                <th>Span / Task</th>
+                <th>Busy Time</th>
+                <th>Idle Time</th>
+                <th>Polls</th>
+                <th>State</th>
+                <th>Diagnostic Status</th>
+              </tr>
+            </thead>
+            <tbody id="trace-rows">
+              <tr id="tr-1"><td>task_1{route="/api/user"}</td><td class="busy">45μs</td><td class="idle">2.4s</td><td>5</td><td>Idle</td><td style="color:var(--accent-green);">✓ OK</td></tr>
+              <tr id="tr-2"><td>task_2{route="/api/compute"}</td><td class="busy" id="t2-busy">0ms</td><td class="idle" id="t2-idle">0ms</td><td id="t2-polls">0</td><td id="t2-st">Idle</td><td id="t2-diag" style="color:var(--accent-green);">✓ OK</td></tr>
+              <tr id="tr-3"><td>task_3{route="/metrics"}</td><td class="busy">12μs</td><td class="idle">5.1s</td><td>2</td><td>Idle</td><td style="color:var(--accent-green);">✓ OK</td></tr>
+            </tbody>
+          </table>
+        `;
+      } else if (id === 4) {
+        stage.innerHTML = `
+          <div class="arch-flow-flex">
+            <div class="node-box" id="node-listener">
+              <div style="font-weight:700; color:var(--accent-amber);">🎧 TcpListener</div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">127.0.0.1:8080</div>
+              <div id="m4-status" style="margin-top:0.4rem; font-size:0.75rem; color:var(--accent-tokio);">Idle</div>
+            </div>
+            <div style="font-size:1.5rem; color:var(--text-dim);">➔</div>
+            <div class="node-box" id="node-accept-match">
+              <div style="font-weight:700;">Resilient Pattern Guard</div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Transient Error Filter</div>
+            </div>
+            <div style="font-size:1.5rem; color:var(--text-dim);">➔</div>
+            <div class="node-box" id="node-worker-pool">
+              <div style="font-weight:700; color:var(--accent-green);">Spawning Pool</div>
+              <div style="font-size:0.75rem; color:var(--text-muted);" id="m4-spawned-count">0 spawned</div>
+            </div>
+          </div>
+        `;
+      } else if (id === 5) {
+        stage.innerHTML = `
+          <div class="arch-flow-flex">
+            <div class="node-box">🌐 Client (TcpStream)</div>
+            <div style="font-size:1.5rem; color:var(--accent-tokio);">⇄</div>
+            <div class="node-box">
+              <div style="font-weight:700; color:var(--accent-rust);">TcpStream::split()</div>
+              <div style="font-size:0.75rem;">Reader Half & Writer Half</div>
+            </div>
+            <div style="font-size:1.5rem; color:var(--accent-green);">⇄</div>
+            <div class="node-box">
+              <div style="font-weight:700; color:var(--accent-green);">tokio::io::copy()</div>
+              <div style="font-size:0.75rem;">Zero-Copy Buffer Loop</div>
+            </div>
+          </div>
+        `;
+      } else if (id === 6) {
+        let slotHtml = '';
+        for (let i = 0; i < 3; i++) {
+          slotHtml += `<div id="chan-slot-${i}" style="width:36px; height:36px; border:1px solid var(--border); border-radius:6px; background:#090d14; display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:0.8rem;">${i+1}</div>`;
+        }
+        stage.innerHTML = `
+          <div class="arch-flow-flex">
+            <div class="node-box" id="m6-producers">
+              <div style="font-weight:700; color:var(--accent-tokio);">Producers (tx1, tx2)</div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">tx.clone() · 2 clones</div>
+            </div>
+            <div style="font-size:1.5rem; color:var(--text-dim);">➔</div>
+            <div class="node-box" style="min-width:220px;">
+              <div style="font-weight:700; color:var(--accent-amber);">📬 Channel Queue (Cap: 3)</div>
+              <div style="font-size:0.75rem; color:var(--text-muted);" id="m6-permits">Permits: 3/3</div>
+              <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">${slotHtml}</div>
+            </div>
+            <div style="font-size:1.5rem; color:var(--text-dim);">➔</div>
+            <div class="node-box" id="m6-receiver">
+              <div style="font-weight:700; color:var(--accent-green);">Consumer (rx.recv())</div>
+              <div style="font-size:0.75rem; color:var(--text-muted);" id="m6-rx-status">Waiting</div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // =========================================================================
+    // EXECUTION CONTROLLERS
+    // =========================================================================
+    async function simPlay() {
+      isRunning = true;
+      isPaused = false;
+      $('btn-play').disabled = true;
+      $('btn-pause').disabled = false;
+
+      if (currentModule === 1) await runSelectRace();
+      else if (currentModule === 2) await runReactorMultiplex();
+      else if (currentModule === 3) await runTracingDashboard();
+      else if (currentModule === 4) await runAcceptResilient();
+      else if (currentModule === 5) await runEchoPipeline();
+      else if (currentModule === 6) await runMpscBackpressure();
+
+      isRunning = false;
+      $('btn-play').disabled = false;
+      $('btn-pause').disabled = true;
+    }
+
+    function simPause() {
+      isPaused = !isPaused;
+      $('btn-pause').textContent = isPaused ? '▶ Resume' : '⏸ Pause';
+    }
+
+    function simStep() {
+      if (!isRunning) simPlay();
+    }
+
+    function simReset() {
+      loadModule(currentModule);
+    }
+
+    // MODULE 1 SIMULATION
+    async function runSelectRace() {
+      highlightCodeLine(2);
+      log('tokio::select! entered: polling all branches concurrently', 'info');
+      await wait(400);
+
+      highlightCodeLine(3);
+      log('Branch 1: db_query().await -> Poll::Pending (waker registered)', 'waker');
+      highlightCodeLine(6);
+      log('Branch 2: sleep(4s).await -> Poll::Pending (timer registered)', 'waker');
+      await wait(400);
+
+      const dbFast = $('m1-dbFast') ? $('m1-dbFast').checked : true;
+      const dbTarget = dbFast ? 1500 : 99999;
+      const timerTarget = 4000;
+      const t0 = Date.now();
+
+      while (isRunning) {
+        if (isPaused) { await wait(100); continue; }
+        const elapsed = (Date.now() - t0) * speedMultiplier;
+        const dbPct = Math.min(100, (elapsed / dbTarget) * 100);
+        const timerPct = Math.min(100, (elapsed / timerTarget) * 100);
+
+        if ($('bar-db')) $('bar-db').style.width = dbPct + '%';
+        if ($('bar-timer')) $('bar-timer').style.width = timerPct + '%';
+
+        if (dbPct >= 100) {
+          $('lane-db').classList.add('winner');
+          $('lane-timer').classList.add('loser');
+          $('st-db').textContent = 'Ready ✅';
+          $('st-timer').textContent = 'DROPPED 🧹';
+          highlightCodeLine(4);
+          log('🔵 db_query() completed first! select! executes arm 1', 'ok');
+          highlightCodeLine(10);
+          log('🧹 sleep(4s) timer future dropped cleanly from timing wheel', 'info');
+          break;
+        }
+
+        if (timerPct >= 100) {
+          $('lane-timer').classList.add('winner');
+          $('lane-db').classList.add('loser');
+          $('st-timer').textContent = 'Ready ✅';
+          $('st-db').textContent = 'DROPPED 🧹';
+          highlightCodeLine(7);
+          log('🟡 sleep(4s) deadline fired first! select! executes timeout arm', 'warn');
+          highlightCodeLine(10);
+          log('🧹 db_query() future DROPPED: TCP socket closed, memory freed without leak!', 'err');
+          break;
+        }
+
+        await wait(50);
+      }
+    }
+
+    // MODULE 2 SIMULATION
+    async function runReactorMultiplex() {
+      highlightCodeLine(2);
+      log('TcpListener bound. Worker thread listening via epoll_wait()', 'info');
+      await wait(400);
+
+      for (let i = 1; i <= 16; i++) {
+        const s = $(`sock-${i}`);
+        if (s) {
+          s.classList.add('parked');
+          s.querySelector('.st').textContent = 'parked';
+        }
+        log(`Client #${i} connected -> read(&mut buf).await -> Poll::Pending 🛑`, 'waker');
+        await wait(60);
+      }
+      log('All 16 connections parked. Worker thread fully FREE 💤', 'ok');
+      await wait(500);
+
+      const arrivals = [3, 7, 11, 14];
+      for (const idx of arrivals) {
+        log(`⚛️ Reactor: epoll event on fd #${idx} readable! waking waker...`, 'waker');
+        $('reactor-core').classList.add('pulse');
+        const s = $(`sock-${idx}`);
+        s.classList.remove('parked');
+        s.classList.add('active');
+        s.querySelector('.st').textContent = 'data!';
+        await wait(250);
+        $('reactor-core').classList.remove('pulse');
+
+        log(`Worker thread schedules task #${idx} ONLY: echoed payload`, 'ok');
+        highlightCodeLine(7);
+        await wait(400);
+
+        s.classList.remove('active');
+        s.classList.add('parked');
+        s.querySelector('.st').textContent = 'parked';
+      }
+      log('Multiplexing demonstrated: 16 sockets handled by single thread without blocking!', 'ok');
+    }
+
+    // MODULE 3 SIMULATION
+    async function runTracingDashboard() {
+      log('Streaming tokio-console telemetry metrics...', 'info');
+      const injectStall = $('m3-injectStall') ? $('m3-injectStall').checked : true;
+
+      for (let i = 1; i <= 4; i++) {
+        $('t2-busy').textContent = (i * 20) + 'μs';
+        $('t2-idle').textContent = (i * 400) + 'ms';
+        $('t2-polls').textContent = i;
+        $('t2-st').textContent = 'Running';
+        await wait(200);
+        $('t2-st').textContent = 'Idle';
+        await wait(150);
+      }
+
+      if (injectStall) {
+        log('🔥 WARNING: Task 2 invoked synchronous compute inside async event loop!', 'err');
+        $('tr-2').classList.add('hot');
+        $('t2-busy').textContent = '1,420ms';
+        $('t2-diag').textContent = '🔥 STALL (>200ms)';
+        $('t2-diag').style.color = 'var(--accent-red)';
+        highlightCodeLine(4);
+        log('Diagnostic: Task poll exceeded 1.4s! Move sync work to spawn_blocking!', 'err');
+      } else {
+        log('Task 2 executed cooperatively within standard μs poll limits', 'ok');
+      }
+    }
+
+    // MODULE 4 SIMULATION
+    async function runAcceptResilient() {
+      const simErr = $('m4-simErr') ? $('m4-simErr').checked : true;
+      log('TcpListener starting accept() loop...', 'info');
+      highlightCodeLine(2);
+      await wait(400);
+
+      for (let i = 1; i <= 3; i++) {
+        log(`Client #${i} connects to listener`, 'info');
+        $('node-listener').classList.add('active');
+        await wait(300);
+
+        if (simErr && i === 2) {
+          log('OS error: accept() returned Err(ECONNABORTED)!', 'warn');
+          highlightCodeLine(4);
+          log('Resilient filter caught transient error: backing off 10ms & retrying...', 'ok');
+          await wait(500);
+          highlightCodeLine(6);
+          log('Server survived! Continuing accept loop.', 'ok');
+        } else {
+          highlightCodeLine(3);
+          log(`Connection #${i} accepted! Spawning dedicated handler task.`, 'ok');
+          $('m4-spawned-count').textContent = `${i} spawned`;
+        }
+        $('node-listener').classList.remove('active');
+        await wait(400);
+      }
+      log('Resilient accept loop survived all connections cleanly.', 'ok');
+    }
+
+    // MODULE 5 SIMULATION
+    async function runEchoPipeline() {
+      highlightCodeLine(2);
+      log('Client connected. Invoking stream.split() into reader & writer halves', 'info');
+      await wait(500);
+      highlightCodeLine(3);
+      log('Piping data: tokio::io::copy(&mut reader, &mut writer).await', 'ok');
+      log('Zero-copy non-blocking loop active: reading 1KB buffer chunks and echoing back.', 'ok');
+    }
+
+    // MODULE 6 SIMULATION
+    async function runMpscBackpressure() {
+      highlightCodeLine(2);
+      log('Created bounded channel: mpsc::channel(3)', 'info');
+      let permits = 3;
+      await wait(400);
+
+      highlightCodeLine(3);
+      log('Producer 1: tx1.send("job-A1").await -> permit consumed (2 left)', 'ok');
+      permits--;
+      $('m6-permits').textContent = `Permits: ${permits}/3`;
+      $('chan-slot-0').style.background = 'var(--accent-tokio)';
+      await wait(400);
+
+      log('Producer 2: tx2.send("job-B1").await -> permit consumed (1 left)', 'ok');
+      permits--;
+      $('m6-permits').textContent = `Permits: ${permits}/3`;
+      $('chan-slot-1').style.background = 'var(--accent-purple)';
+      await wait(400);
+
+      highlightCodeLine(4);
+      log('Coordinator: drop(tx) called. Channel will close when workers drop clones.', 'info');
+      await wait(500);
+
+      highlightCodeLine(5);
+      log('Consumer: rx.recv().await popped job-A1 -> permit freed', 'ok');
+      $('chan-slot-0').style.background = '#090d14';
+      permits++;
+      $('m6-permits').textContent = `Permits: ${permits}/3`;
+      await wait(400);
+
+      log('Consumer: rx.recv().await popped job-B1 -> permit freed', 'ok');
+      $('chan-slot-1').style.background = '#090d14';
+      permits++;
+      $('m6-permits').textContent = `Permits: ${permits}/3`;
+      await wait(400);
+
+      log('Workers finished and dropped tx1 & tx2. rx.recv() returns None -> Loop exits cleanly!', 'ok');
+      $('m6-rx-status').textContent = 'Graceful Exit (None)';
+    }
+
+    // Initialize default module on start
+    window.addEventListener('DOMContentLoaded', () => {
+      loadModule(1);
+    });
+  </script>
+
+</body>
+</html>
