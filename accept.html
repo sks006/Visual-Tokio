@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>while let Ok((mut socket, _addr)) = listener.accept().await</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --line:#30363d;
+    --ls:#ffd43b; --pend:#ffa94d; --ok:#51cf66; --err:#ff6b6b;
+    --sock:#4dabf7; --client:#9775fa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#e6edf3;
+       font:13px/1.5 ui-monospace,"SF Mono",Menlo,monospace;padding:20px}
+  h1{font-size:14px;color:#7d8590;font-weight:400;margin:0 0 12px;letter-spacing:.3px}
+  button{background:#238636;border:0;color:#fff;padding:8px 16px;border-radius:8px;
+         font:inherit;cursor:pointer;margin-right:8px;margin-bottom:14px}
+  button:disabled{opacity:.4;cursor:default}
+  label{font-size:12px;color:#7d8590;cursor:pointer;user-select:none}
+  #stage{position:relative;background:var(--panel);border:1px solid var(--line);
+         border-radius:14px;padding:20px;min-height:470px;overflow:hidden}
+
+  .row{display:flex;gap:18px;align-items:flex-start}
+  .col{display:flex;flex-direction:column;gap:12px}
+
+  #listener{border:2px solid var(--ls);color:var(--ls);border-radius:12px;
+            padding:12px 14px;background:#0d1117;width:230px;transition:.35s}
+  #listener .lbl{font-weight:700;font-size:12px}
+  #listener .sub{font-size:11px;color:#7d8590;margin-top:4px;line-height:1.6}
+  #listener.active{box-shadow:0 0 0 3px rgba(255,212,59,.15),0 0 24px -4px var(--ls);
+                   transform:translateY(-2px)}
+  #listener.dead{border-color:var(--err);color:var(--err);opacity:.45}
+  #listener.dead.active{box-shadow:0 0 0 3px rgba(255,107,107,.2),0 0 24px -4px var(--err)}
+
+  #status{font-size:11px;padding:5px 9px;border-radius:6px;background:#21262d;
+          color:#7d8590;display:inline-block;margin-top:10px;transition:.3s}
+  #status.pend{background:#3d2a00;color:var(--pend)}
+  #status.ok{background:#0f2e1a;color:var(--ok)}
+  #status.err{background:#3d0f0f;color:var(--err)}
+
+  #pool{display:flex;flex-direction:column;gap:8px;flex:1}
+  .task{border:2px solid var(--sock);border-radius:10px;padding:9px 11px;background:#0d1117;
+        opacity:0;transform:translateX(10px);transition:.4s;display:flex;
+        justify-content:space-between;align-items:center;font-size:11px}
+  .task.in{opacity:1;transform:translateX(0)}
+  .task b{color:var(--sock)}
+  .task .role{color:#7d8590;font-size:10px}
+
+  #clients{display:flex;flex-direction:column;gap:8px;width:150px}
+  .cli{border:2px dashed var(--client);color:var(--client);border-radius:8px;
+       padding:7px 9px;font-size:11px;text-align:center;opacity:.35;transition:.3s}
+  .cli.active{opacity:1;background:#9775fa22;box-shadow:0 0 16px -4px var(--client)}
+
+  .dot{position:absolute;padding:3px 8px;border-radius:999px;font-size:10px;
+       font-weight:700;color:#000;white-space:nowrap;pointer-events:none;z-index:99;
+       opacity:0;transform:scale(.6);
+       transition:transform .7s cubic-bezier(.34,1.3,.64,1),opacity .2s}
+  .dot.go{opacity:1;transform:translate(var(--dx),var(--dy)) scale(1)}
+
+  #log{margin-top:14px;background:#010409;border:1px solid var(--line);
+       border-radius:10px;padding:10px;height:170px;overflow:auto;font-size:11px}
+  #log div{padding:1px 0;border-bottom:1px solid #161b22;animation:in .3s}
+  @keyframes in{from{opacity:0;transform:translateX(-6px)}}
+  .l-ls{color:var(--ls)} .l-pend{color:var(--pend)} .l-ok{color:var(--ok)}
+  .l-err{color:var(--err)} .l-cl{color:var(--client)} .l-dim{color:#7d8590}
+</style>
+</head>
+<body>
+<h1>while let Ok((mut socket, _addr)) = listener.accept().await</h1>
+<button id="play">▶ Play</button>
+<label><input type="checkbox" id="simErr"> simulate a transient Err (ECONNABORTED)</label>
+
+<div id="stage">
+  <div class="row">
+    <div class="col">
+      <div id="listener">
+        <div class="lbl">🎧 TcpListener · :8080</div>
+        <div class="sub">accept(&amp;self) -&gt; io::Result&lt;(TcpStream, SocketAddr)&gt;</div>
+        <div id="status">⏸ idle</div>
+      </div>
+    </div>
+    <div class="col" id="clients"></div>
+    <div id="pool"></div>
+  </div>
+</div>
+<div id="log"></div>
+
+<script>
+const $=s=>document.querySelector(s), stage=$('#stage'), logEl=$('#log');
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+function log(m,c=''){const d=document.createElement('div');d.className=c;d.textContent=m;
+  logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
+function setStatus(t,c=''){$('#status').textContent=t;$('#status').className=c;}
+
+function fly(from,to,text,color){
+  return new Promise(res=>{
+    const a=from.getBoundingClientRect(),b=to.getBoundingClientRect(),
+          s=stage.getBoundingClientRect();
+    const d=document.createElement('div');
+    d.className='dot';d.textContent=text;d.style.background=color;
+    d.style.left=(a.left-s.left+a.width/2)+'px';
+    d.style.top=(a.top-s.top+a.height/2)+'px';
+    d.style.setProperty('--dx',(b.left-a.left)+'px');
+    d.style.setProperty('--dy',(b.top-a.top)+'px');
+    stage.appendChild(d);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>d.classList.add('go')));
+    setTimeout(()=>{d.remove();res();},760);
+  });
+}
+
+// build client boxes
+for(let i=1;i<=4;i++){
+  const c=document.createElement('div');
+  c.className='cli';c.id='cli'+i;c.textContent='🌐 client '+i;
+  $('#clients').appendChild(c);
+}
+
+async function run(){
+  $('#play').disabled=true;
+  $('#pool').innerHTML='';logEl.innerHTML='';
+  $('#listener').classList.remove('dead');
+  document.querySelectorAll('.cli').forEach(c=>c.classList.remove('active'));
+  setStatus('⏸ idle');
+  await wait(300);
+
+  log('listener = TcpListener::bind("127.0.0.1:8080").await', 'l-ls');
+  log('entering: while let Ok((mut socket, _addr)) = listener.accept().await', 'l-dim');
+  await wait(500);
+
+  const simErr = $('#simErr').checked;
+  let tasksMade = 0;
+
+  for(let i=1;i<=4;i++){
+    // a client arrives
+    $('#cli'+i).classList.add('active');
+    log(`🔌 client ${i} connects → SYN queued in listen backlog`, 'l-cl');
+    await wait(350);
+
+    // park
+    $('#listener').classList.add('active');
+    setStatus('⏳ accept().await → Pending 🛑','pend');
+    log('   accept() future → Poll::Pending (no conn ready)', 'l-pend');
+    log('   waker registered with reactor · main task parked 💤', 'l-dim');
+    await wait(600);
+
+    // wake + accept
+    log('   🔔 reactor: listen fd readable → waker.wake()', 'l-pend');
+    setStatus('🔄 re-polled → accept4()','pend');
+    await wait(450);
+
+    // simulate the Err on client 3 if toggle is on
+    if (simErr && i===3) {
+      setStatus('❌ Ok(..) failed to match','err');
+      log('   accept() → Poll::Ready(Err(ECONNABORTED))', 'l-err');
+      log('   pattern Ok((mut socket,_addr)) does NOT match', 'l-err');
+      log('   → match arm `_ => break` fires', 'l-err');
+      await wait(700);
+      $('#listener').classList.remove('active');
+      $('#listener').classList.add('dead');
+      setStatus('🏁 loop exited — SERVER DEAD','err');
+      log('🪦 while-let exited on a TRANSIENT error', 'l-err');
+      log('   correct fix: match, then `continue` on recoverable errors', 'l-dim');
+      await wait(900);
+      $('#play').disabled=false;
+      return;
+    }
+
+    // success path
+    const t=document.createElement('div');
+    t.className='task';
+    t.innerHTML=`<span><b>🔌 socket ${i}</b> <span class="role">· TcpStream (mut)</span></span>
+                 <span class="role">_addr = 127.0.0.1:${40000+i}</span>`;
+    $('#pool').appendChild(t);
+    await fly($('#listener'), t, 'Ok', '#51cf66');
+    t.classList.add('in');
+    tasksMade++;
+
+    setStatus(`✅ Ok → spawned task ${i}`,'ok');
+    log(`   Ok((socket, addr)) matched → mut socket + _addr bound`, 'l-ok');
+    log(`   tokio::spawn(async move { … }) → 🟦 task ${i}`, 'l-ok');
+    $('#listener').classList.remove('active');
+    await wait(600);
+    setStatus('⏸ looping back to accept()');
+    log('   loop iterates → brand-new accept() future created', 'l-dim');
+    await wait(400);
+  }
+
+  log('🎧 still listening — waiting for the next connection', 'l-dim');
+  log('✅ demo complete', 'l-ok');
+  $('#play').disabled=false;
+}
+$('#play').addEventListener('click',run);
+</script>
+</body>
+</html>

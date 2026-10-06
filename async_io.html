@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Async I/O — 1 thread, N sockets</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--thread:#4dabf7;
+        --sock:#9775fa;--park:#6c757d;--ready:#51cf66;--wake:#ffd43b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#e6edf3;
+       font:13px/1.55 ui-monospace,Menlo,monospace;padding:20px}
+  h1{font-size:15px;color:#7d8590;font-weight:400;margin:0 0 14px}
+  button{background:#238636;border:0;color:#fff;padding:8px 16px;border-radius:8px;
+         font:inherit;cursor:pointer;margin-bottom:14px}
+  button:disabled{opacity:.4;cursor:default}
+  #stage{position:relative;background:var(--panel);border:1px solid var(--line);
+         border-radius:14px;padding:20px;min-height:420px}
+  .center{display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:18px}
+  #thread{border:3px solid var(--thread);color:var(--thread);border-radius:12px;
+          padding:12px 22px;font-weight:700;text-align:center;transition:.3s}
+  #thread.busy{box-shadow:0 0 30px -4px var(--thread);transform:scale(1.06)}
+  #thread.idle{border-color:var(--park);color:var(--park);opacity:.55}
+  #reactor{border:2px dashed var(--wake);color:var(--wake);border-radius:10px;
+           padding:8px 18px;font-size:12px}
+  #reactor.fire{background:#3d2a00;box-shadow:0 0 22px -4px var(--wake)}
+  #sockets{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-top:14px}
+  .sk{position:relative;border:2px solid var(--sock);border-radius:8px;padding:8px 6px;
+      text-align:center;font-size:10px;background:#0d1117;transition:.4s}
+  .sk .id{font-weight:700;color:var(--sock)}
+  .sk .state{font-size:9px;color:#7d8590;margin-top:4px}
+  .sk.parked{border-color:var(--park);opacity:.5}
+  .sk.parked .id{color:var(--park)}
+  .sk.ready{border-color:var(--ready);box-shadow:0 0 16px -3px var(--ready);
+            background:#0f2e1a}
+  .sk.ready .id{color:var(--ready)}
+  .sk.pumping{animation:pulse .5s infinite alternate}
+  @keyframes pulse{from{transform:scale(1)}to{transform:scale(1.07)}}
+  #log{margin-top:16px;background:#010409;border:1px solid var(--line);
+       border-radius:10px;padding:10px;height:150px;overflow:auto;font-size:11px}
+  #log div{padding:1px 0;border-bottom:1px solid #161b22;animation:in .3s}
+  @keyframes in{from{opacity:0;transform:translateX(-6px)}}
+  .lv-ok{color:var(--ready)} .lv-park{color:var(--park)} .lv-wake{color:var(--wake)}
+  .lv-dim{color:#7d8590}
+</style></head><body>
+<h1>One worker thread · one epoll reactor · 16 parked sockets</h1>
+<button id="play">▶ Run</button>
+<div id="stage">
+  <div class="center">
+    <div id="thread">🧵 worker thread</div>
+    <div id="reactor">⚛️ reactor · epoll_wait()</div>
+  </div>
+  <div id="sockets"></div>
+</div>
+<div id="log"></div>
+<script>
+const $=s=>document.querySelector(s), logEl=$('#log'), sockets=$('#sockets');
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+function log(m,c=''){const d=document.createElement('div');d.className=c;d.textContent=m;
+  logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
+for(let i=1;i<=16;i++){
+  const s=document.createElement('div');
+  s.className='sk';s.id='sk'+i;
+  s.innerHTML=`<div class="id">🔌 ${i}</div><div class="state">idle</div>`;
+  sockets.appendChild(s);
+}
+async function run(){
+  $('#play').disabled=true;logEl.innerHTML='';
+  document.querySelectorAll('.sk').forEach(s=>{
+    s.className='sk'; s.querySelector('.state').textContent='idle';});
+  $('#thread').className=''; $('#reactor').className=''; $('#thread').textContent='🧵 worker thread';
+
+  log('🔌 16 clients connect · 16 tasks spawned', 'lv-dim');
+  await wait(400);
+  $('#thread').textContent='🧵 worker · running 16 tasks';
+  for(let i=1;i<=16;i++){
+    await wait(60);
+    log(`   task ${i}: socket.read(&mut buf).await → Pending 🛑`, 'lv-park');
+    const s=$('#sk'+i); s.classList.add('parked');
+    s.querySelector('.state').textContent='parked';
+  }
+  await wait(400);
+
+  log('😴 all 16 parked · thread fully free', 'lv-park');
+  $('#thread').classList.add('idle');
+  $('#thread').textContent='🧵 worker · idle 💤';
+  await wait(700);
+
+  // random wakeups
+  log('⚛️ reactor: epoll_wait() — no data yet', 'lv-wake');
+  $('#reactor').classList.add('fire');
+  await wait(800);
+  $('#reactor').classList.remove('fire');
+
+  const arrivals=[3,7,11,14];
+  for(const n of arrivals){
+    log(`⚛️ reactor: fd ${n} readable → waker.wake()`, 'lv-wake');
+    $('#reactor').classList.add('fire');
+    const s=$('#sk'+n);
+    s.classList.remove('parked'); s.classList.add('ready','pumping');
+    s.querySelector('.state').textContent='data!';
+    await wait(180);
+    $('#reactor').classList.remove('fire');
+
+    $('#thread').classList.remove('idle');
+    $('#thread').classList.add('busy');
+    $('#thread').textContent=`🧵 worker · polling task ${n}`;
+    log(`   ▶ thread runs task ${n} ONLY`, 'lv-ok');
+    await wait(400);
+    log(`   task ${n}: read → Ok(n), write_all → echo ✅`, 'lv-ok');
+    s.classList.remove('pumping','ready');
+    s.querySelector('.state').textContent='parked again';
+    await wait(200);
+    s.classList.add('parked');
+    $('#thread').classList.remove('busy');
+    $('#thread').classList.add('idle');
+    $('#thread').textContent='🧵 worker · idle 💤';
+    await wait(300);
+  }
+
+  log('✅ 16 sockets handled by ONE thread · no blocking', 'lv-ok');
+  $('#thread').classList.remove('idle');
+  $('#thread').textContent='🧵 worker thread';
+  $('#play').disabled=false;
+}
+$('#play').addEventListener('click',run);
+</script></body></html>

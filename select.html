@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>tokio::select! — race & cancel</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--win:#51cf66;--lose:#ff6b6b;
+        --db:#4dabf7;--timer:#ffd43b;--pend:#ffa94d}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#e6edf3;
+       font:13px/1.55 ui-monospace,Menlo,monospace;padding:20px}
+  h1{font-size:15px;color:#7d8590;font-weight:400;margin:0 0 14px;letter-spacing:.4px}
+  button{background:#238636;border:0;color:#fff;padding:8px 16px;border-radius:8px;
+         font:inherit;cursor:pointer;margin-right:8px;margin-bottom:14px}
+  button:disabled{opacity:.4;cursor:default}
+  label{font-size:12px;color:#7d8590;cursor:pointer;margin-right:14px}
+  #stage{position:relative;background:var(--panel);border:1px solid var(--line);
+         border-radius:14px;padding:22px;min-height:360px}
+  .branch{display:flex;align-items:center;gap:14px;margin-bottom:14px;
+          border:2px solid var(--line);border-radius:10px;padding:12px;
+          transition:.35s;background:#0d1117}
+  .branch.db{border-color:var(--db)} .branch.timer{border-color:var(--timer)}
+  .branch.win{border-color:var(--win);box-shadow:0 0 22px -4px var(--win);
+              background:#0f2e1a}
+  .branch.lose{border-color:var(--lose);opacity:.35;background:#2a0f0f}
+  .name{width:130px;font-weight:700}
+  .name.db{color:var(--db)} .name.timer{color:var(--timer)}
+  .bar{flex:1;height:22px;background:#21262d;border-radius:6px;overflow:hidden}
+  .bar>div{height:100%;width:0;transition:width .25s linear}
+  .bar.db>div{background:var(--db)}
+  .bar.timer>div{background:var(--timer)}
+  .status{width:120px;font-size:11px;text-align:right;color:#7d8590}
+  .status.pend{color:var(--pend)} .status.win{color:var(--win)} .status.lose{color:var(--lose)}
+  #log{margin-top:14px;background:#010409;border:1px solid var(--line);
+       border-radius:10px;padding:10px;height:150px;overflow:auto;font-size:11px}
+  #log div{padding:1px 0;border-bottom:1px solid #161b22;animation:in .3s}
+  @keyframes in{from{opacity:0;transform:translateX(-6px)}}
+  .lv-ok{color:var(--win)} .lv-err{color:var(--lose)} .lv-pend{color:var(--pend)}
+  .lv-dim{color:#7d8590}
+</style></head><body>
+<h1>tokio::select! { db.query() =&gt; … , sleep(5s) =&gt; … }</h1>
+<button id="play">▶ Race</button>
+<label><input type="checkbox" id="dbWins" checked> DB responds fast</label>
+
+<div id="stage">
+  <div class="branch db" id="bDb">
+    <div class="name db">🔵 db.query()</div>
+    <div class="bar db"><div id="dbBar"></div></div>
+    <div class="status pend" id="dbSt">pending</div>
+  </div>
+  <div class="branch timer" id="bTimer">
+    <div class="name timer">🟡 sleep(5s)</div>
+    <div class="bar timer"><div id="tBar"></div></div>
+    <div class="status pend" id="tSt">pending</div>
+  </div>
+</div>
+<div id="log"></div>
+<script>
+const $=s=>document.querySelector(s), logEl=$('#log');
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+function log(m,c=''){const d=document.createElement('div');d.className=c;d.textContent=m;
+  logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
+function setStatus(el,t,c){el.textContent=t;el.className='status '+c;}
+
+async function run(){
+  $('#play').disabled=true; logEl.innerHTML='';
+  $('#bDb').className='branch db'; $('#bTimer').className='branch timer';
+  $('#dbBar').style.width='0%'; $('#tBar').style.width='0%';
+  setStatus($('#dbSt'),'pending','pend'); setStatus($('#tSt'),'pending','pend');
+
+  const dbFast = $('#dbWins').checked;
+  const dbDur = dbFast ? 1800 : 99999;    // 1.8s "fast" or effectively never
+  const timerDur = 5000;
+
+  log('▶ entering select! — polling all branches', 'lv-dim');
+  await wait(300);
+  log('   db.query() → Poll::Pending 🛑 · registered waker', 'lv-pend');
+  log('   sleep(5s)  → Poll::Pending 🛑 · registered waker', 'lv-pend');
+  await wait(200);
+
+  log('⏳ both branches racing…', 'lv-dim');
+  const t0=performance.now();
+  let winner=null;
+
+  while(!winner){
+    const el = performance.now()-t0;
+    const dbPct = Math.min(100, el/dbDur*100);
+    const tPct  = Math.min(100, el/timerDur*100);
+    $('#dbBar').style.width=dbPct+'%';
+    $('#tBar').style.width=tPct+'%';
+    if (dbPct>=100 && winner===null) winner='db';
+    if (tPct >=100 && winner===null) winner='timer';
+    await wait(40);
+  }
+
+  if(winner==='db'){
+    $('#bDb').classList.add('win'); setStatus($('#dbSt'),'✅ Ready','win');
+    $('#bTimer').classList.add('lose'); setStatus($('#tSt'),'❌ dropped','lose');
+    log('🔵 db.query() returned Ready ✅', 'lv-ok');
+    log('   select! runs its arm', 'lv-ok');
+    log('   🧹 sleep(5s) future DROPPED — no leak', 'lv-dim');
+    log('✅ got the answer in ~1.8s, saved 3.2s', 'lv-ok');
+  } else {
+    $('#bTimer').classList.add('win'); setStatus($('#tSt'),'✅ Ready','win');
+    $('#bDb').classList.add('lose'); setStatus($('#dbSt'),'❌ dropped','lose');
+    log('🟡 sleep(5s) fired first ✅', 'lv-ok');
+    log('   select! runs the timeout arm', 'lv-ok');
+    log('   🧹 db.query() future DROPPED — TCP socket closed, buffers freed', 'lv-err');
+    log('⏰ TIMEOUT — but the runtime is NOT stuck', 'lv-ok');
+  }
+  $('#play').disabled=false;
+}
+$('#play').addEventListener('click',run);
+</script></body></html>
