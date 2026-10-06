@@ -424,30 +424,32 @@ $('#play').addEventListener('click',run);
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'fontSize':'14px','lineColor':'#868e96'}}}%%
 flowchart LR
-    subgraph WHO["🧑 WHO"]
-        W1["<b>tracing</b> crate<br/><i>macros + Span + Event + Field</i>"]
-        W2["<b>tracing_subscriber</b><br/><i>the sink</i>"]
-        W3["<b>tokio-console</b><br/><i>live TUI dashboard</i>"]
-        W4["Layers: fmt / json / OTLP / custom"]
-    end
-    subgraph WHEN["⏱️ WHEN"]
-        T1["🟢 From day 1 — always"]
-        T2["🔴 When the runtime<br/>'hangs' — hunt for blocking"]
-        T3["🔍 When you need to<br/>correlate across services"]
-    end
-    subgraph WHAT["🎯 WHAT"]
-        P1["Spans ⏱️ — a period of time<br/><i>connection lifecycle</i>"]
-        P2["Fields 🏷️ — key/value identity<br/><i>peer=1.2.3.4:55112</i>"]
-        P3["Events 📝 — the log message<br/><i>info!(bytes=n, &quot;echoed&quot;)</i>"]
-        P4["Busy% / Idle% per task<br/>→ exposes blocking work"]
-    end
+  subgraph WHO["🧑 WHO"]
+    W1["<b>tracing</b> crate<br/><i>macros + Span + Event + Field</i>"]
+    W2["<b>tracing_subscriber</b><br/><i>the sink</i>"]
+    W3["<b>tokio-console</b><br/><i>live TUI dashboard</i>"]
+    W4["Layers: fmt / json / OTLP / custom"]
+  end
 
-    classDef who fill:#4dabf7,stroke:#1864ab,stroke-width:2px,color:#fff
-    classDef when fill:#ffd43b,stroke:#e67700,stroke-width:2px,color:#000
-    classDef what fill:#51cf66,stroke:#2b8a3e,stroke-width:2px,color:#000
-    class W1,W2,W3,W4 who
-    class T1,T2,T3 when
-    class P1,P2,P3,P4 what
+  subgraph WHEN["⏱️ WHEN"]
+    T1["🟢 From day 1 — always"]
+    T2["🔴 When the runtime<br/>'hangs' — hunt for blocking"]
+    T3["🔍 When you need to<br/>correlate across services"]
+  end
+
+  subgraph WHAT["🎯 WHAT"]
+    P1["Spans ⏱️ — a period of time<br/><i>connection lifecycle</i>"]
+    P2["Fields 🏷️ — key/value identity<br/><i>peer=1.2.3.4:55112</i>"]
+    P3["Events 📝 — the log message<br/><i>info!(bytes=n, 'echoed')</i>"]
+    P4["Busy% / Idle% per task<br/>→ exposes blocking work"]
+  end
+
+  classDef who fill:#4dabf7,stroke:#1864ab,stroke-width:2px,color:#fff
+  classDef when fill:#ffd43b,stroke:#e67700,stroke-width:2px,color:#000
+  classDef what fill:#51cf66,stroke:#2b8a3e,stroke-width:2px,color:#000
+  class W1,W2,W3,W4 who
+  class T1,T2,T3 when
+  class P1,P2,P3,P4 what
 ```
 
 ## 🐛 What tokio-console reveals
