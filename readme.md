@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-green.svg)](LICENSE)
 [![Interactive Studio](https://img.shields.io/badge/interactive-web%20studio-38bdf8.svg)](index.html)
 
-A monolithic, production-grade visual guide and executable reference suite for **Tokio**, Rust's asynchronous runtime. This repository bridges theoretical async runtime concepts with **recorded video demonstrations**, **interactive browser animations**, **high-resolution architectural maps**, and **verified production Rust implementations**.
+A monolithic, production-grade visual guide and executable reference suite for **Tokio**, Rust's asynchronous runtime. This repository bridges theoretical async runtime concepts with **live animated visual demonstrations**, **recorded video walkthroughs**, **high-resolution architectural maps**, and **verified production Rust implementations**.
 
 ---
 
@@ -22,14 +22,14 @@ npx serve .
 python3 -m http.server 8080
 ```
 
-| Module | Architectural Topic | Video Recording | Interactive Simulator |
-|---|---|---|---|
-| **01** | Control Flow & `select!` | [🎥 `select_animation.mp4`](asset/select_animation.mp4) | [🕹️ `01_select.html`](simulations/01_select.html) |
-| **02** | Async I/O & epoll Multiplexing | [🎥 `async_io_animation.mp4`](asset/async_io_animation.mp4) | [🕹️ `02_async_io.html`](simulations/02_async_io.html) |
-| **03** | Tracing & `tokio-console` | [🎥 `tracing_animation.mp4`](asset/tracing_animation.mp4) | [🕹️ `03_tracing.html`](simulations/03_tracing.html) |
-| **04** | Resilient `TcpListener` Accept Loop | [🎥 `accept_animation.mp4`](asset/accept_animation.mp4) | [🕹️ `04_accept.html`](simulations/04_accept.html) |
-| **05** | High-Performance TCP Echo Pipeline | [🎥 `echo_animation.mp4`](asset/echo_animation.mp4) | [🕹️ `05_echo.html`](simulations/05_echo.html) |
-| **06** | Bounded MPSC Channels & Permits | [🎥 `mpsc_animation.mp4`](asset/mpsc_animation.mp4) | [🕹️ `06_mpsc.html`](simulations/06_mpsc.html) |
+| Module | Architectural Topic | Live Animation Preview | High-Res Video | Interactive Simulator |
+|---|---|---|---|---|
+| **01** | Control Flow & `select!` | [`asset/select_animation.gif`](asset/select_animation.gif) | [🎥 `select_animation.mp4`](asset/select_animation.mp4) | [🕹️ `01_select.html`](simulations/01_select.html) |
+| **02** | Async I/O & epoll Multiplexing | [`asset/async_io_animation.gif`](asset/async_io_animation.gif) | [🎥 `async_io_animation.mp4`](asset/async_io_animation.mp4) | [🕹️ `02_async_io.html`](simulations/02_async_io.html) |
+| **03** | Tracing & `tokio-console` | [`asset/tracing_animation.gif`](asset/tracing_animation.gif) | [🎥 `tracing_animation.mp4`](asset/tracing_animation.mp4) | [🕹️ `03_tracing.html`](simulations/03_tracing.html) |
+| **04** | Resilient `TcpListener` Accept Loop | [`asset/accept_animation.gif`](asset/accept_animation.gif) | [🎥 `accept_animation.mp4`](asset/accept_animation.mp4) | [🕹️ `04_accept.html`](simulations/04_accept.html) |
+| **05** | High-Performance TCP Echo Pipeline | [`asset/echo_animation.gif`](asset/echo_animation.gif) | [🎥 `echo_animation.mp4`](asset/echo_animation.mp4) | [🕹️ `05_echo.html`](simulations/05_echo.html) |
+| **06** | Bounded MPSC Channels & Permits | [`asset/mpsc_animation.gif`](asset/mpsc_animation.gif) | [🎥 `mpsc_animation.mp4`](asset/mpsc_animation.mp4) | [🕹️ `06_mpsc.html`](simulations/06_mpsc.html) |
 
 ### 2. Monolithic Rust Executable Suite
 Run the companion production patterns directly from the unified CLI runner:
@@ -51,6 +51,90 @@ cargo test
 
 ---
 
+## 🏛️ The Tokio Execution Model: Dual-Pool Architecture
+
+Under the hood, Tokio maintains **two completely separate thread pools** to ensure that compute-heavy or blocking operations never starve lightweight async network tasks:
+
+```mermaid
+flowchart TD
+    subgraph TOKIO["🦀 Tokio Runtime"]
+        subgraph WORKERS["🧑‍🍳 Async Worker Pool (Main Chefs)"]
+            W1["Worker Thread 1"]
+            W2["Worker Thread 2"]
+            W3["Worker Thread N (= CPU Cores)"]
+            TS["tokio::spawn(async { ... })<br/>Fast, cooperative, non-blocking tasks"]
+        end
+        
+        subgraph BLOCKING["🔪 Blocking Thread Pool (Prep Cooks)"]
+            B1["Blocking Thread 1"]
+            B2["Blocking Thread 2"]
+            B3["Spins up to 512 Threads on Demand"]
+            SB["tokio::task::spawn_blocking(|| { ... })<br/>Heavy CPU math, legacy sync DB, disk I/O"]
+        end
+    end
+
+    TS --> WORKERS
+    SB --> BLOCKING
+    
+    classDef w fill:#38bdf8,stroke:#0284c7,stroke-width:2px,color:#000
+    classDef b fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#000
+    class W1,W2,W3,TS w
+    class B1,B2,B3,SB b
+```
+
+1. **The Async Worker Pool (The Main Chefs 🧑‍🍳)**:
+   - Sized to match available CPU cores.
+   - Runs cooperative asynchronous tasks spawned with `tokio::spawn`.
+   - **Requirement**: Tasks must yield frequently at `.await` suspension points. If a task runs synchronous compute without yielding, it starves that worker thread.
+2. **The Blocking Thread Pool (The Dedicated Prep Cooks 🔪)**:
+   - Dedicated backup pool that dynamically spins up to 512 threads.
+   - Handles heavy CPU-bound math, synchronous file operations (`std::fs`), or legacy synchronous database drivers via `tokio::task::spawn_blocking`.
+   - Allows the main worker threads to keep accepting new network requests without jitter.
+
+```rust
+// Heavy synchronous computation safely offloaded to the blocking threadpool
+let result = tokio::task::spawn_blocking(|| {
+    let mut total = 0u64;
+    for i in 0..10_000_000 {
+        total += i;
+    }
+    total
+}).await?;
+```
+
+---
+
+## 🔒 Shared State: `Arc<Mutex<T>>` vs. Message Passing
+
+When multiple tasks need to coordinate, Tokio provides two primary paradigms:
+
+### 1. Shared Memory: The `Arc<Mutex<T>>` Pattern
+- **`Arc` (Atomic Reference Counted)**: Enables thread-safe shared ownership.
+  - **Zero-Copy Cloning**: Calling `Arc::clone(&counter)` **does not copy the underlying data**. It simply allocates a new pointer and increments a tiny atomic integer counter.
+- **`Mutex` (Mutual Exclusion)**: Ensures only one task can mutate the inner value at a time.
+- **Automatic RAII Unlock**: Calling `.lock()` returns a `MutexGuard`. When `guard` exits scope at the closing brace `}`, Rust's ownership model **automatically unlocks the mutex**, preventing deadlocks.
+
+```rust
+use std::sync::{Arc, Mutex};
+
+let active_users = Arc::new(Mutex::new(0));
+
+for _ in 0..10 {
+    let users_clone = Arc::clone(&active_users);
+    tokio::spawn(async move {
+        // Guard automatically releases lock at the end of this scope }
+        let mut guard = users_clone.lock().unwrap();
+        *guard += 1;
+    });
+}
+```
+
+> [!CAUTION]
+> **Never hold a standard `std::sync::MutexGuard` across an `.await` boundary!**  
+> If an async task holding a standard mutex yields at `.await`, another task on the same worker thread trying to acquire the mutex will cause a thread-level deadlock. Either drop the guard before `.await` using a scoped block, or use `tokio::sync::Mutex`.
+
+---
+
 ## 🗺️ High-Resolution Architectural Maps
 
 The repository includes high-resolution infographics detailing the internal structure and lifecycle of the Tokio runtime:
@@ -68,11 +152,11 @@ In asynchronous Rust, futures are **lazy**: they make no progress until polled. 
 
 Dropping a future triggers Rust's RAII destructors: pending timers are cancelled in the runtime timing wheel, TCP sockets close, and memory buffers are freed without leaks.
 
-### 🎥 Video Demonstration
-<video src="asset/select_animation.mp4" controls width="100%"></video>
+### 🎥 Live Animation Demo
+![tokio::select! Animation](asset/select_animation.gif)
 
-> 🔗 **Direct Video Link**: [`asset/select_animation.mp4`](asset/select_animation.mp4)  
-> 🕹️ **Interactive Animation**: [`simulations/01_select.html`](simulations/01_select.html)
+> 🎬 **High-Res Video**: [`asset/select_animation.mp4`](asset/select_animation.mp4)  
+> 🕹️ **Interactive Simulation**: [`simulations/01_select.html`](simulations/01_select.html)
 
 ### Decision Flowchart
 
@@ -119,11 +203,11 @@ Traditional thread-per-connection architectures scale poorly: 10,000 idle thread
 
 Tokio solves this using **non-blocking I/O multiplexing** (`epoll` on Linux, `kqueue` on macOS, `IOCP` on Windows). A tiny pool of worker threads can effortlessly service tens of thousands of idle connections. When a socket returns `WouldBlock`, the task parks, saves its `Waker`, and yields the thread. The OS reactor wakes only the exact task whose descriptor becomes readable.
 
-### 🎥 Video Demonstration
-<video src="asset/async_io_animation.mp4" controls width="100%"></video>
+### 🎥 Live Animation Demo
+![Async I/O Reactor Animation](asset/async_io_animation.gif)
 
-> 🔗 **Direct Video Link**: [`asset/async_io_animation.mp4`](asset/async_io_animation.mp4)  
-> 🕹️ **Interactive Animation**: [`simulations/02_async_io.html`](simulations/02_async_io.html)
+> 🎬 **High-Res Video**: [`asset/async_io_animation.mp4`](asset/async_io_animation.mp4)  
+> 🕹️ **Interactive Simulation**: [`simulations/02_async_io.html`](simulations/02_async_io.html)
 
 ```mermaid
 flowchart TB
@@ -151,17 +235,23 @@ flowchart TB
 
 ---
 
-## 🔍 Part 3 — Observability & `tokio-console`
+## 🔍 Part 3 — Observability, Tracing & `tokio-console`
 
-Asynchronous bugs rarely crash; they **hang**. If a developer calls `std::thread::sleep` or acquires a blocking `std::sync::Mutex` inside an async task, that entire worker thread stalls, starving every other task scheduled on the same thread.
+In asynchronous runtimes, `println!` fails: logs from thousands of concurrently yielding tasks interleave and lose context. We replace `println!` with the **Tracing Trinity**:
 
-Using `tracing` and `tokio-console`, you monitor real-time task telemetry:
+1. **Spans ⏱️ ("Where am I?")**:
+   - Represents a period of time with a beginning and end (e.g., client connection lifecycle).
+   - Tasks carry the span context across `.await` points and thread hops via `.instrument(span)`.
+2. **Fields 🏷️ ("Who is on the other end?")**:
+   - Typed key-value pairs attached to a span (e.g., `client_ip = %addr`).
+3. **Events 📝 ("What happened?")**:
+   - Structured log statements with severity levels (`info!`, `warn!`, `error!`) that automatically inherit all enclosing span fields.
 
-### 🎥 Video Demonstration
-<video src="asset/tracing_animation.mp4" controls width="100%"></video>
+### 🎥 Live Animation Demo
+![tokio-console Tracing Animation](asset/tracing_animation.gif)
 
-> 🔗 **Direct Video Link**: [`asset/tracing_animation.mp4`](asset/tracing_animation.mp4)  
-> 🕹️ **Interactive Animation**: [`simulations/03_tracing.html`](simulations/03_tracing.html)
+> 🎬 **High-Res Video**: [`asset/tracing_animation.mp4`](asset/tracing_animation.mp4)  
+> 🕹️ **Interactive Simulation**: [`simulations/03_tracing.html`](simulations/03_tracing.html)
 
 ```mermaid
 flowchart TD
@@ -178,15 +268,10 @@ flowchart TD
     class T2,BAD bad
 ```
 
-### The Golden Rule:
-> **Never perform blocking computation or sync I/O directly in an async task.**  
-> Move CPU-heavy work to `tokio::task::spawn_blocking`:
-```rust
-// ✅ Proper offloading to dedicated threadpool
-let result = tokio::task::spawn_blocking(move || {
-    heavy_cpu_crypto_or_disk_operation()
-}).await?;
-```
+### Catching CPU Hogs with `tokio-console`
+`tokio-console` monitors task **Busy Time** (time spent executing inside `poll`) vs **Idle Time** (time spent parked waiting on reactor wakers).
+- **Busy time > 10ms** is a major red flag indicating synchronous blocking code.
+- **Remedy**: Move the synchronous code into `tokio::task::spawn_blocking`.
 
 ---
 
@@ -202,11 +287,11 @@ while let Ok((socket, addr)) = listener.accept().await {
 
 In production networks, clients frequently abort handshakes (`ECONNABORTED`), or the process temporarily hits file descriptor limits (`EMFILE`). The naive `while let Ok` loop exits immediately on error, **killing the entire server**.
 
-### 🎥 Video Demonstration
-<video src="asset/accept_animation.mp4" controls width="100%"></video>
+### 🎥 Live Animation Demo
+![TcpListener Accept Loop Animation](asset/accept_animation.gif)
 
-> 🔗 **Direct Video Link**: [`asset/accept_animation.mp4`](asset/accept_animation.mp4)  
-> 🕹️ **Interactive Animation**: [`simulations/04_accept.html`](simulations/04_accept.html)
+> 🎬 **High-Res Video**: [`asset/accept_animation.mp4`](asset/accept_animation.mp4)  
+> 🕹️ **Interactive Simulation**: [`simulations/04_accept.html`](simulations/04_accept.html)
 
 ### Production Resilient Pattern
 ```rust
@@ -243,11 +328,11 @@ loop {
 
 Splitting a `TcpStream` into owned or borrowed halves enables concurrent, non-blocking reads and writes without mutex contention:
 
-### 🎥 Video Demonstration
-<video src="asset/echo_animation.mp4" controls width="100%"></video>
+### 🎥 Live Animation Demo
+![TCP Echo Server Pipeline Animation](asset/echo_animation.gif)
 
-> 🔗 **Direct Video Link**: [`asset/echo_animation.mp4`](asset/echo_animation.mp4)  
-> 🕹️ **Interactive Animation**: [`simulations/05_echo.html`](simulations/05_echo.html)
+> 🎬 **High-Res Video**: [`asset/echo_animation.mp4`](asset/echo_animation.mp4)  
+> 🕹️ **Interactive Simulation**: [`simulations/05_echo.html`](simulations/05_echo.html)
 
 ```rust
 // Split stream into reader and writer halves
@@ -257,19 +342,48 @@ let (mut reader, mut writer) = stream.split();
 tokio::io::copy(&mut reader, &mut writer).await?;
 ```
 
+### 🚪 The `Ok(0)` EOF Disconnect Rule & The 100% CPU Infinite Loop Trap
+
+When reading from a TCP socket in a loop:
+```rust
+loop {
+    match socket.read(&mut buf).await {
+        Ok(0) => {
+            // 🔑 CRITICAL: Ok(0) means End-of-File (client closed connection)!
+            break;
+        }
+        Ok(n) => {
+            socket.write_all(&buf[0..n]).await?;
+        }
+        Err(e) => {
+            eprintln!("Socket read error: {e}");
+            break;
+        }
+    }
+}
+```
+
+> [!WARNING]
+> **Why `Ok(0)` is NOT an error**: When a client closes a TCP socket cleanly, the OS kernel notifies the socket with EOF, returning `Ok(0)`.  
+> If you fail to check `if n == 0 { break; }`, `socket.read()` will never pause again—it will instantly return `Ok(0)` millions of times a second in a runaway loop, **pegging a CPU core at 100%**!
+
 ---
 
-## 📬 Part 6 — Bounded MPSC Channels & Backpressure
+## 📬 Part 6 — Bounded MPSC Channels, Backpressure & Shutdown
 
-Tokio's `mpsc::channel(capacity)` provides bounded buffering. If the buffer is full, senders await permits asynchronously, propagating natural backpressure through the pipeline.
+Tokio's `mpsc::channel(capacity)` provides bounded buffering for inter-task communication:
 
-### 🎥 Video Demonstration
-<video src="asset/mpsc_animation.mp4" controls width="100%"></video>
+### 🎥 Live Animation Demo
+![MPSC Bounded Channel Animation](asset/mpsc_animation.gif)
 
-> 🔗 **Direct Video Link**: [`asset/mpsc_animation.mp4`](asset/mpsc_animation.mp4)  
-> 🕹️ **Interactive Animation**: [`simulations/06_mpsc.html`](simulations/06_mpsc.html)
+> 🎬 **High-Res Video**: [`asset/mpsc_animation.mp4`](asset/mpsc_animation.mp4)  
+> 🕹️ **Interactive Simulation**: [`simulations/06_mpsc.html`](simulations/06_mpsc.html)
 
-### The Coordinator Handle Drop Rule:
+### 🚰 Capacity vs. Backpressure
+- `mpsc::channel(32)` sets the **maximum in-flight buffer capacity**, NOT the total number of messages in the lifetime of the program.
+- If 32 unread messages are queued, the 33rd `tx.send().await` call will **asynchronously pause and yield**, preventing slow consumers from causing out-of-memory (OOM) crashes.
+
+### 🔑 The Coordinator Handle Drop Rule:
 `rx.recv()` returns `Some(msg)` until **all** `Sender` handles are dropped. If the coordinating thread clones `tx` for workers but forgets to `drop(tx)` itself, `rx.recv().await` **will hang forever waiting for more messages**.
 
 ```rust
@@ -278,16 +392,17 @@ let (tx, mut rx) = mpsc::channel(32);
 let tx1 = tx.clone();
 tokio::spawn(async move {
     tx1.send("task 1").await.unwrap();
-    // tx1 dropped here
+    // tx1 dropped automatically when task exits scope }
 });
 
-// 🔑 CRITICAL: Drop original sender in coordinator!
+// 🔑 CRITICAL: Drop original coordinator sender handle!
 drop(tx);
 
-// Now the receiver loop cleanly terminates when workers finish!
+// Now the receiver loop cleanly terminates when all workers finish!
 while let Some(msg) = rx.recv().await {
     println!("Processed: {msg}");
 }
+// rx.recv() returns None; loop exits gracefully
 ```
 
 ---
@@ -304,6 +419,7 @@ while let Some(msg) = rx.recv().await {
 | `mpsc::Sender::send()` | ⚠️ Conditional | If cancelled, message is not sent; slot permit remains unconsumed. |
 | `tokio::time::sleep()` | ✅ Safe | Cancels timer wheel entry without side effects. |
 | `tokio::spawn()` | ✅ Safe | Returns `JoinHandle`; cancellation via `.abort()`. |
+| `tokio::task::spawn_blocking()` | ⚠️ Conditional | Cannot interrupt running synchronous thread; JoinHandle cancellation detaches. |
 
 ---
 
@@ -320,19 +436,25 @@ tokio/
 │   ├── 05_echo.html              # Pattern 5: TCP echo server animation
 │   └── 06_mpsc.html              # Pattern 6: Bounded MPSC channel animation
 ├── asset/                        # 🎥 Video Demonstrations & High-Res Infographics
-│   ├── select_animation.mp4      # Video 1: tokio::select! animation
-│   ├── async_io_animation.mp4    # Video 2: Async I/O reactor animation
-│   ├── tracing_animation.mp4     # Video 3: Tracing & tokio-console animation
-│   ├── accept_animation.mp4      # Video 4: Resilient accept loop animation
-│   ├── echo_animation.mp4        # Video 5: TCP echo server animation
-│   ├── mpsc_animation.mp4        # Video 6: Bounded MPSC channel animation
+│   ├── select_animation.gif      # Live GIF: tokio::select! animation (GitHub native)
+│   ├── select_animation.mp4      # High-Res Video: tokio::select! animation
+│   ├── async_io_animation.gif    # Live GIF: Async I/O reactor animation (GitHub native)
+│   ├── async_io_animation.mp4    # High-Res Video: Async I/O reactor animation
+│   ├── tracing_animation.gif     # Live GIF: Tracing & tokio-console animation (GitHub native)
+│   ├── tracing_animation.mp4     # High-Res Video: Tracing & tokio-console animation
+│   ├── accept_animation.gif      # Live GIF: Resilient accept loop animation (GitHub native)
+│   ├── accept_animation.mp4      # High-Res Video: Resilient accept loop animation
+│   ├── echo_animation.gif        # Live GIF: TCP echo server animation (GitHub native)
+│   ├── echo_animation.mp4        # High-Res Video: TCP echo server animation
+│   ├── mpsc_animation.gif        # Live GIF: Bounded MPSC channel animation (GitHub native)
+│   ├── mpsc_animation.mp4        # High-Res Video: Bounded MPSC channel animation
 │   ├── tokio_architecture_map.png# High-res Tokio Architecture Infographic
 │   └── tokio_lifecycle_map.png   # High-res Task & Future Lifecycle Infographic
 ├── doces/
 │   └── 🧵Learning Rust Tokio.pdf # Community documentation & reference guide
 ├── src/
 │   ├── main.rs                   # 🦀 Monolithic CLI Runner (all 6 patterns)
-│   └── lib.rs                    # Reusable async modules & traits
+│   └── lib.rs                    # Reusable async modules & traits (including Arc<Mutex<T>>)
 ├── examples/
 │   ├── 01_select_timeout.rs      # Pattern 1 executable
 │   ├── 02_async_io_reactor.rs    # Pattern 2 executable
@@ -341,7 +463,7 @@ tokio/
 │   ├── 05_echo_server.rs         # Pattern 5 executable
 │   └── 06_mpsc_backpressure.rs   # Pattern 6 executable
 ├── tests/
-│   └── integration_tests.rs      # Automated test suite
+│   └── integration_tests.rs      # Automated test suite (all patterns verified)
 ├── .github/workflows/
 │   └── ci.yml                    # Automated CI test & GitHub Pages deploy workflow
 ├── Cargo.toml                    # Package manifest & dependencies

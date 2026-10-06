@@ -123,3 +123,34 @@ pub mod channel_patterns {
         })
     }
 }
+
+pub mod state_patterns {
+    use std::sync::{Arc, Mutex};
+
+    /// Demonstrates safe shared mutable state across asynchronous tasks using `Arc<Mutex<T>>`.
+    ///
+    /// Clones the `Arc` pointer cheaply (atomic counter increment) and ensures
+    /// the RAII `MutexGuard` is dropped immediately before any `.await` boundary.
+    pub async fn increment_counter_concurrently(
+        counter: Arc<Mutex<usize>>,
+        task_count: usize,
+    ) -> usize {
+        let mut handles = Vec::with_capacity(task_count);
+
+        for _ in 0..task_count {
+            let counter_clone = Arc::clone(&counter);
+            handles.push(tokio::spawn(async move {
+                // Lock guard is scoped to release immediately
+                let mut guard = counter_clone.lock().expect("mutex poisoned");
+                *guard += 1;
+            }));
+        }
+
+        for handle in handles {
+            let _ = handle.await;
+        }
+
+        let final_val = *counter.lock().expect("mutex poisoned");
+        final_val
+    }
+}

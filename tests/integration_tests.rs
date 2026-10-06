@@ -79,3 +79,13 @@ async fn test_mpsc_producer_consumer() {
     h1.await.unwrap();
     h2.await.unwrap();
 }
+
+#[tokio::test]
+async fn test_arc_mutex_shared_state() {
+    use std::sync::{Arc, Mutex};
+    use tokio_visual_guide::state_patterns;
+
+    let counter = Arc::new(Mutex::new(0));
+    let final_count = state_patterns::increment_counter_concurrently(counter, 10).await;
+    assert_eq!(final_count, 10);
+}
